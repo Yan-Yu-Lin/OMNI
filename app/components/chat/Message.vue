@@ -178,18 +178,6 @@ const getToolName = (type: string): string => {
   display: flex;
   gap: 16px;
   padding: 24px 32px;
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .message.user {
