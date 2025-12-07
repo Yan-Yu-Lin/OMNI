@@ -51,4 +51,17 @@ try {
   console.error('[DB Migration] Error checking/adding status column:', e);
 }
 
+// Migration: Add updated_at column to messages table if it doesn't exist
+try {
+  const messagesInfo = db.prepare("PRAGMA table_info(messages)").all() as { name: string }[];
+  const hasUpdatedAt = messagesInfo.some(col => col.name === 'updated_at');
+  if (!hasUpdatedAt) {
+    // SQLite doesn't allow CURRENT_TIMESTAMP as default in ALTER TABLE, so use NULL
+    db.exec("ALTER TABLE messages ADD COLUMN updated_at DATETIME");
+    console.log('[DB Migration] Added updated_at column to messages table');
+  }
+} catch (e) {
+  console.error('[DB Migration] Error checking/adding updated_at column to messages:', e);
+}
+
 export default db;

@@ -17,6 +17,7 @@ export interface MessageRecord {
   role: 'user' | 'assistant';
   content: string; // JSON string of UIMessage parts
   created_at: string;
+  updated_at: string;
 }
 
 export interface SettingRecord {

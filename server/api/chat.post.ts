@@ -104,32 +104,6 @@ export default defineEventHandler(async (event) => {
     tools,
     stopWhen: stepCountIs(10), // Allow up to 10 tool steps for complex queries
 
-    // NEW: Token-level callback for real-time streaming via SSE
-    onChunk: ({ chunk }) => {
-      if (chunk.type === 'text-delta') {
-        // Broadcast text token to all connected SSE clients
-        streamManager.broadcast(conversationId, {
-          type: 'text-delta',
-          content: chunk.textDelta,
-        });
-      } else if (chunk.type === 'tool-call') {
-        // Broadcast tool call start
-        streamManager.broadcast(conversationId, {
-          type: 'tool-call',
-          toolName: chunk.toolName,
-          toolCallId: chunk.toolCallId,
-          args: chunk.args,
-        });
-      } else if (chunk.type === 'tool-result') {
-        // Broadcast tool result
-        streamManager.broadcast(conversationId, {
-          type: 'tool-result',
-          toolCallId: chunk.toolCallId,
-          result: chunk.result,
-        });
-      }
-    },
-
     // Called after each step - only save tool results here, not messages
     // (to avoid duplicates with onFinish)
     onStepFinish: async ({ response }) => {
@@ -164,11 +138,47 @@ export default defineEventHandler(async (event) => {
   });
 
   // Consume the stream in the background (required for callbacks to fire)
-  result.text.catch((err) => {
-    console.error('[Chat API] Error consuming stream:', err);
-    setConversationStatus(conversationId, 'error');
-    streamManager.error(conversationId, err.message || 'Stream consumption error');
-  });
+  // Fire-and-forget: wrap in async IIFE
+  (async () => {
+    try {
+      for await (const part of result.fullStream) {
+        switch (part.type) {
+          case 'text-delta':
+            streamManager.broadcast(conversationId, {
+              type: 'text-delta',
+              content: part.textDelta,
+            });
+            break;
+          case 'tool-call':
+            streamManager.broadcast(conversationId, {
+              type: 'tool-call',
+              toolName: part.toolName,
+              toolCallId: part.toolCallId,
+              args: part.args,
+            });
+            break;
+          case 'tool-result':
+            streamManager.broadcast(conversationId, {
+              type: 'tool-result',
+              toolCallId: part.toolCallId,
+              result: part.result,
+            });
+            break;
+          case 'error':
+            streamManager.broadcast(conversationId, {
+              type: 'error',
+              error: part.error,
+            });
+            break;
+        }
+      }
+    } catch (err) {
+      console.error('[Chat API] Stream error:', err);
+      setConversationStatus(conversationId, 'error');
+      const errorMessage = err instanceof Error ? err.message : 'Stream error';
+      streamManager.error(conversationId, errorMessage);
+    }
+  })();
 
   // 5. Return immediately (fire-and-forget)
   return { success: true, conversationId };

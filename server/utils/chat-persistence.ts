@@ -50,6 +50,7 @@ export function saveUserMessage(conversationId: string, message: UIMessage) {
 /**
  * Convert model messages to UIMessages and save them to the database
  * This is called from onStepFinish and onFinish callbacks
+ * Uses UPSERT to avoid duplicate rows for the same assistant message
  */
 export function saveAssistantMessages(
   conversationId: string,
@@ -60,14 +61,19 @@ export function saveAssistantMessages(
 
   if (assistantMessages.length === 0) return;
 
+  // Prepare UPSERT statement once
+  const upsert = db.prepare(`
+    INSERT INTO messages (id, conversation_id, role, content)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      content = excluded.content,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+
   // Convert model messages to a format we can store
   for (const msg of assistantMessages) {
+    // Use the AI SDK's message.id if available, only generate nanoid if truly missing
     const messageId = msg.id || nanoid();
-
-    // Check if this message already exists (upsert)
-    const existing = db
-      .prepare('SELECT id FROM messages WHERE id = ?')
-      .get(messageId);
 
     // Handle content - can be string or array
     const contentArray = typeof msg.content === 'string'
@@ -96,20 +102,8 @@ export function saveAssistantMessages(
 
     const content = JSON.stringify({ parts });
 
-    if (existing) {
-      // Update existing message
-      db.prepare(`
-        UPDATE messages
-        SET content = ?
-        WHERE id = ?
-      `).run(content, messageId);
-    } else {
-      // Insert new message
-      db.prepare(`
-        INSERT INTO messages (id, conversation_id, role, content)
-        VALUES (?, ?, ?, ?)
-      `).run(messageId, conversationId, 'assistant', content);
-    }
+    // UPSERT: Insert or update if the message ID already exists
+    upsert.run(messageId, conversationId, 'assistant', content);
   }
 
   // Update conversation timestamp
