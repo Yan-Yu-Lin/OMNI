@@ -32,9 +32,9 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    // Enable better-sqlite3 in Nitro
+    // Tell Nitro not to bundle better-sqlite3 (it's a native module)
     externals: {
-      inline: ['better-sqlite3'],
+      external: ['better-sqlite3'],
     },
   },
 });

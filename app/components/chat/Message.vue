@@ -15,7 +15,14 @@
         <template v-for="(part, index) in message.parts" :key="index">
           <!-- Text parts -->
           <div v-if="part.type === 'text'" class="text-part">
-            <span class="text-content">{{ part.text }}</span>
+            <!-- Use markdown rendering for assistant messages -->
+            <ChatMarkdownRenderer
+              v-if="message.role === 'assistant'"
+              :content="part.text"
+              class="text-content"
+            />
+            <!-- Plain text for user messages -->
+            <span v-else class="text-content plain-text">{{ part.text }}</span>
             <span v-if="isStreaming && isLastTextPart(index)" class="cursor" />
           </div>
 
@@ -60,6 +67,61 @@
             </template>
             <template #output="{ output: toolOutput }">
               <ToolsScrapeResult :result="toolOutput" />
+            </template>
+          </ToolsToolCard>
+
+          <!-- Crawl Site tool -->
+          <ToolsToolCard
+            v-else-if="part.type === 'tool-crawl_site'"
+            tool-name="crawl_site"
+            :state="part.state"
+            :input="part.input"
+            :output="part.output"
+            :error-text="part.errorText"
+          >
+            <template #input="{ input: toolInput }">
+              <div class="tool-input-summary">
+                <div>
+                  <strong>URL:</strong>
+                  <a :href="toolInput.url" target="_blank" rel="noopener" class="tool-url">
+                    {{ toolInput.url }}
+                  </a>
+                </div>
+                <div class="tool-input-detail">
+                  Limit: {{ toolInput.limit || 10 }} pages, Max depth: {{ toolInput.maxDepth || 2 }}
+                </div>
+              </div>
+            </template>
+            <template #output="{ output: toolOutput }">
+              <ToolsCrawlResults :result="toolOutput" />
+            </template>
+          </ToolsToolCard>
+
+          <!-- Map Site tool -->
+          <ToolsToolCard
+            v-else-if="part.type === 'tool-map_site'"
+            tool-name="map_site"
+            :state="part.state"
+            :input="part.input"
+            :output="part.output"
+            :error-text="part.errorText"
+          >
+            <template #input="{ input: toolInput }">
+              <div class="tool-input-summary">
+                <div>
+                  <strong>URL:</strong>
+                  <a :href="toolInput.url" target="_blank" rel="noopener" class="tool-url">
+                    {{ toolInput.url }}
+                  </a>
+                </div>
+                <div class="tool-input-detail">
+                  <span>Limit: {{ toolInput.limit || 100 }} URLs</span>
+                  <span v-if="toolInput.search">, Filter: "{{ toolInput.search }}"</span>
+                </div>
+              </div>
+            </template>
+            <template #output="{ output: toolOutput }">
+              <ToolsMapResults :result="toolOutput" />
             </template>
           </ToolsToolCard>
 
@@ -185,12 +247,15 @@ const getToolName = (type: string): string => {
 }
 
 .text-part {
-  display: inline;
+  display: block;
 }
 
 .text-content {
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+.text-content.plain-text {
+  white-space: pre-wrap;
 }
 
 .cursor {

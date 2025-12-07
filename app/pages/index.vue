@@ -2,30 +2,89 @@
   <LayoutAppLayout>
     <template #sidebar>
       <LayoutSidebar @new-chat="handleNewChat">
-        <p style="padding: 16px; color: #666; font-size: 14px">
-          No conversations yet
-        </p>
+        <SidebarConversationList
+          :conversations="conversations"
+          :loading="loading"
+          @select="handleSelectConversation"
+          @delete="handleDeleteConversation"
+        />
       </LayoutSidebar>
     </template>
 
-    <ChatContainer
-      :messages="messages"
-      :is-streaming="isStreaming"
-      @send="handleSend"
-    />
+    <div class="home-content">
+      <div class="welcome">
+        <h1>AI Chat</h1>
+        <p>Start a new conversation or select one from the sidebar.</p>
+        <button class="start-btn" @click="handleNewChat">
+          New Conversation
+        </button>
+      </div>
+    </div>
   </LayoutAppLayout>
 </template>
 
 <script setup lang="ts">
-const { messages, sendMessage, isStreaming } = useAppChat();
+const router = useRouter();
 
-const handleSend = (text: string) => {
-  sendMessage(text);
+const {
+  conversations,
+  loading,
+  fetchConversations,
+  createConversation,
+  deleteConversation,
+} = useConversations();
+
+const handleNewChat = async () => {
+  const conv = await createConversation();
+  router.push(`/chat/${conv.id}`);
 };
 
-const handleNewChat = () => {
-  // Refresh the page to start new chat
-  // Proper implementation in Phase 5
-  window.location.reload();
+const handleSelectConversation = (id: string) => {
+  router.push(`/chat/${id}`);
 };
+
+const handleDeleteConversation = async (id: string) => {
+  await deleteConversation(id);
+};
+
+onMounted(() => {
+  fetchConversations();
+});
 </script>
+
+<style scoped>
+.home-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.welcome {
+  text-align: center;
+}
+
+.welcome h1 {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.welcome p {
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.start-btn {
+  padding: 12px 24px;
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.start-btn:hover {
+  background: #333;
+}
+</style>

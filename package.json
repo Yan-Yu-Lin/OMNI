@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev",
+    "dev": "unset NUXT_FIRECRAWL_API_KEY NUXT_FIRECRAWL_SELF_HOSTED_URL && nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare"
@@ -14,8 +14,11 @@
     "@openrouter/ai-sdk-provider": "^1.4.1",
     "ai": "6.0.0-beta.137",
     "better-sqlite3": "^12.5.0",
+    "dompurify": "^3.3.0",
+    "marked": "^17.0.1",
     "nanoid": "^5.1.6",
     "nuxt": "^4.2.1",
+    "shiki": "^3.19.0",
     "vue": "^3.5.25",
     "vue-router": "^4.6.3",
     "zod": "^4.1.13"

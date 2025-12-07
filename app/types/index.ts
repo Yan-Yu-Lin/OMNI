@@ -6,8 +6,8 @@ export interface Conversation {
   id: string;
   title: string;
   model: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ConversationWithMessages extends Conversation {
@@ -70,6 +70,36 @@ export interface ScrapeUrlOutput {
   description: string;
   markdown: string;
   links?: string[];
+}
+
+// Crawl Site tool types
+export interface CrawlSiteInput {
+  url: string;
+  limit?: number;
+  maxDepth?: number;
+}
+
+export interface CrawlPage {
+  url: string;
+  title: string;
+  markdown: string;
+}
+
+export interface CrawlSiteOutput {
+  pagesFound: number;
+  pages: CrawlPage[];
+}
+
+// Map Site tool types
+export interface MapSiteInput {
+  url: string;
+  limit?: number;
+  search?: string;
+}
+
+export interface MapSiteOutput {
+  urlsFound: number;
+  urls: string[];
 }
 
 // Tool state type
