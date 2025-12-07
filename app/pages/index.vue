@@ -1,55 +1,23 @@
 <template>
-  <LayoutAppLayout>
-    <template #sidebar>
-      <LayoutSidebar @new-chat="handleNewChat">
-        <SidebarConversationList
-          :conversations="conversations"
-          :loading="loading"
-          @select="handleSelectConversation"
-          @delete="handleDeleteConversation"
-        />
-      </LayoutSidebar>
-    </template>
-
-    <div class="home-content">
-      <div class="welcome">
-        <h1>AI Chat</h1>
-        <p>Start a new conversation or select one from the sidebar.</p>
-        <button class="start-btn" @click="handleNewChat">
-          New Conversation
-        </button>
-      </div>
+  <div class="home-content">
+    <div class="welcome">
+      <h1>AI Chat</h1>
+      <p>Start a new conversation or select one from the sidebar.</p>
+      <button class="start-btn" @click="handleNewChat">
+        New Conversation
+      </button>
     </div>
-  </LayoutAppLayout>
+  </div>
 </template>
 
 <script setup lang="ts">
 const router = useRouter();
-
-const {
-  conversations,
-  loading,
-  fetchConversations,
-  createConversation,
-  deleteConversation,
-} = useConversations();
+const { createConversation } = useConversations();
 
 const handleNewChat = async () => {
   const conv = await createConversation();
   router.push(`/chat/${conv.id}`);
 };
-
-const handleSelectConversation = (id: string) => {
-  router.push(`/chat/${id}`);
-};
-
-const handleDeleteConversation = async (id: string) => {
-  await deleteConversation(id);
-};
-
-onMounted(() => {
-  fetchConversations();
-});
 </script>
 
 <style scoped>

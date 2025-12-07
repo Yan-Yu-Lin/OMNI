@@ -1,28 +1,14 @@
 <template>
-  <LayoutAppLayout>
-    <template #sidebar>
-      <LayoutSidebar @new-chat="handleNewChat">
-        <SidebarConversationList
-          :conversations="conversations"
-          :active-id="conversationId"
-          :loading="loadingConversations"
-          @select="handleSelectConversation"
-          @delete="handleDeleteConversation"
-        />
-      </LayoutSidebar>
-    </template>
+  <div v-if="loadingChat" class="loading-chat">
+    Loading conversation...
+  </div>
 
-    <div v-if="loadingChat" class="loading-chat">
-      Loading conversation...
-    </div>
-
-    <ChatContainer
-      v-else
-      :messages="chatMessages"
-      :is-streaming="isStreaming"
-      @send="handleSend"
-    />
-  </LayoutAppLayout>
+  <ChatContainer
+    v-else
+    :messages="chatMessages"
+    :is-streaming="isStreaming"
+    @send="handleSend"
+  />
 </template>
 
 <script setup lang="ts">
@@ -35,14 +21,7 @@ const router = useRouter();
 
 const conversationId = computed(() => route.params.id as string);
 
-const {
-  conversations,
-  loading: loadingConversations,
-  fetchConversations,
-  getConversation,
-  createConversation,
-  deleteConversation,
-} = useConversations();
+const { fetchConversations, getConversation } = useConversations();
 
 // Chat state
 const loadingChat = ref(true);
@@ -51,7 +30,6 @@ const conversationStatus = ref<ConversationStatus>('idle');
 // Chat instance - will be recreated when conversation changes
 // Using shallowRef so we can track changes to the chat instance itself
 const chat = shallowRef<Chat<UIMessage> | null>(null);
-
 
 // Reactive messages - we'll sync this from the Chat instance
 const chatMessages = ref<UIMessage[]>([]);
@@ -93,7 +71,7 @@ const initializeChat = (initialMessages: UIMessage[]) => {
     onFinish: () => {
       console.log('[Chat] Stream finished');
       conversationStatus.value = 'idle';
-      fetchConversations();
+      fetchConversations(true); // Force refresh to update title/timestamp
     },
     onError: (error) => {
       console.error('[Chat] Error:', error);
@@ -159,7 +137,7 @@ const refreshFromDB = async () => {
 
       if (conv.status !== 'streaming') {
         // Refresh conversation list to show updated title/timestamp
-        fetchConversations();
+        fetchConversations(true);
       }
     }
   } catch (err) {
@@ -192,43 +170,9 @@ const handleSend = async (text: string) => {
   }
 };
 
-const handleNewChat = async () => {
-  const conv = await createConversation();
-  router.push(`/chat/${conv.id}`);
-};
-
-const handleSelectConversation = (id: string) => {
-  if (id !== conversationId.value) {
-    if (chat.value) {
-      chat.value.stop();
-    }
-    router.push(`/chat/${id}`);
-  }
-};
-
-const handleDeleteConversation = async (id: string) => {
-  await deleteConversation(id);
-
-  // If deleted current, go to home or another conversation
-  if (id === conversationId.value) {
-    if (chat.value) {
-      chat.value.stop();
-    }
-    const firstConversation = conversations.value[0];
-    if (firstConversation) {
-      router.push(`/chat/${firstConversation.id}`);
-    } else {
-      router.push('/');
-    }
-  }
-};
-
-// Load data on mount
-onMounted(async () => {
-  await Promise.all([
-    fetchConversations(),
-    loadConversation(),
-  ]);
+// Load conversation on mount
+onMounted(() => {
+  loadConversation();
 });
 
 // Cleanup on unmount

@@ -2,17 +2,25 @@ import type { Conversation, ConversationWithMessages } from '~/types';
 import type { UIMessage } from 'ai';
 
 export function useConversations() {
-  const conversations = ref<Conversation[]>([]);
-  const loading = ref(false);
-  const error = ref<string | null>(null);
+  // Use useState for SSR-safe shared state across components
+  const conversations = useState<Conversation[]>('conversations', () => []);
+  const loading = useState<boolean>('conversations-loading', () => false);
+  const error = useState<string | null>('conversations-error', () => null);
+  const hasFetched = useState<boolean>('conversations-fetched', () => false);
 
-  // Fetch all conversations
-  const fetchConversations = async () => {
+  // Fetch all conversations (with guard against redundant fetches)
+  const fetchConversations = async (force = false) => {
+    // Skip if already fetched (unless forced)
+    if (hasFetched.value && !force) {
+      return;
+    }
+
     loading.value = true;
     error.value = null;
 
     try {
       conversations.value = await $fetch<Conversation[]>('/api/conversations');
+      hasFetched.value = true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to fetch conversations';
       console.error('Failed to fetch conversations:', e);
