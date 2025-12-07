@@ -52,8 +52,6 @@ const conversationStatus = ref<ConversationStatus>('idle');
 // Using shallowRef so we can track changes to the chat instance itself
 const chat = shallowRef<Chat<UIMessage> | null>(null);
 
-// Sync interval cleanup
-let syncInterval: ReturnType<typeof setInterval> | null = null;
 
 // Reactive messages - we'll sync this from the Chat instance
 const chatMessages = ref<UIMessage[]>([]);
@@ -66,13 +64,15 @@ const isStreaming = computed(() =>
   chatStatus.value === 'streaming' || chatStatus.value === 'submitted'
 );
 
+// Store watchers for cleanup
+let stopMessagesWatch: (() => void) | null = null;
+let stopStatusWatch: (() => void) | null = null;
+
 // Create or update the Chat instance
 const initializeChat = (initialMessages: UIMessage[]) => {
-  // Clean up previous chat instance and interval
-  if (syncInterval) {
-    clearInterval(syncInterval);
-    syncInterval = null;
-  }
+  // Clean up previous watchers
+  if (stopMessagesWatch) stopMessagesWatch();
+  if (stopStatusWatch) stopStatusWatch();
   if (chat.value) {
     chat.value.stop();
   }
@@ -93,7 +93,6 @@ const initializeChat = (initialMessages: UIMessage[]) => {
     onFinish: () => {
       console.log('[Chat] Stream finished');
       conversationStatus.value = 'idle';
-      // Refresh conversation list to show updated title/timestamp
       fetchConversations();
     },
     onError: (error) => {
@@ -104,31 +103,20 @@ const initializeChat = (initialMessages: UIMessage[]) => {
 
   chat.value = newChat;
 
-  // Initial sync
-  chatMessages.value = [...newChat.messages];
-  chatStatus.value = newChat.status;
+  // Access internal Vue refs for smooth streaming (instant updates, no polling)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chatState = (newChat as any).state;
+  const internalMessages = chatState.messagesRef as Ref<UIMessage[]>;
+  const internalStatus = chatState.statusRef as Ref<'ready' | 'submitted' | 'streaming' | 'error'>;
 
-  // Set up sync interval to track changes from the Chat class
-  // The Chat class uses Vue refs internally, but they're not directly accessible
-  // so we poll to sync the state
-  syncInterval = setInterval(() => {
-    if (chat.value) {
-      const currentMessages = chat.value.messages;
-      const currentStatus = chat.value.status;
+  // Watch internal refs - triggers instantly when stream updates
+  stopMessagesWatch = watch(internalMessages, (newMessages) => {
+    chatMessages.value = [...newMessages];
+  }, { immediate: true, deep: true });
 
-      // Debug logging to diagnose streaming issues
-      const lastMsg = currentMessages[currentMessages.length - 1];
-      const lastPart = lastMsg?.parts?.[lastMsg.parts.length - 1];
-      console.log('[Sync] Status:', currentStatus, 'Msgs:', currentMessages.length,
-        'LastPartType:', lastPart?.type,
-        'TextLen:', lastPart?.type === 'text' ? (lastPart as { text: string }).text?.length : 'N/A');
-
-      // Always update - let Vue handle the diffing
-      // The JSON.stringify comparison was potentially missing incremental updates
-      chatMessages.value = [...currentMessages];
-      chatStatus.value = currentStatus;
-    }
-  }, 100); // 100ms is sufficient for smooth updates
+  stopStatusWatch = watch(internalStatus, (newStatus) => {
+    chatStatus.value = newStatus;
+  }, { immediate: true });
 };
 
 // Load conversation from server
@@ -245,10 +233,8 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(() => {
-  if (syncInterval) {
-    clearInterval(syncInterval);
-    syncInterval = null;
-  }
+  if (stopMessagesWatch) stopMessagesWatch();
+  if (stopStatusWatch) stopStatusWatch();
   if (chat.value) {
     chat.value.stop();
   }
