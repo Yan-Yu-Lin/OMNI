@@ -197,17 +197,15 @@ const addToolCallPart = (toolName: string, toolCallId: string, args: unknown) =>
     messages.value = [...messages.value, streamingAssistantMessage];
   }
 
-  // Add tool-invocation part
+  // Add tool part using tool-${toolName} format to match Message.vue expectations
   streamingAssistantMessage.parts = [
     ...(streamingAssistantMessage.parts || []),
     {
-      type: 'tool-invocation',
-      toolInvocation: {
-        toolCallId,
-        toolName,
-        args,
-        state: 'call',
-      },
+      type: `tool-${toolName}`,  // e.g., 'tool-scrape_url', 'tool-web_search'
+      toolCallId,
+      toolName,
+      state: 'call',  // 'call' during execution
+      input: args,
     } as UIMessage['parts'][0],
   ];
 
@@ -219,16 +217,17 @@ const addToolCallPart = (toolName: string, toolCallId: string, args: unknown) =>
 const updateToolResult = (toolCallId: string, result: unknown) => {
   if (!streamingAssistantMessage) return;
 
-  // Find the tool part and update it
+  // Find the tool part by toolCallId (now using type starting with 'tool-')
   const toolPart = streamingAssistantMessage.parts?.find(
-    (p) => p.type === 'tool-invocation' &&
-           'toolInvocation' in p &&
-           p.toolInvocation.toolCallId === toolCallId
+    (p) => p.type.startsWith('tool-') &&
+           'toolCallId' in p &&
+           (p as { toolCallId: string }).toolCallId === toolCallId
   );
 
-  if (toolPart && 'toolInvocation' in toolPart) {
-    toolPart.toolInvocation.state = 'result';
-    toolPart.toolInvocation.result = result;
+  if (toolPart) {
+    // Update the tool part with output
+    (toolPart as { state: string; output: unknown }).state = 'output-available';
+    (toolPart as { state: string; output: unknown }).output = result;
     // Trigger reactivity
     messages.value = [...messages.value];
   }
@@ -290,7 +289,7 @@ const handleSend = async (text: string) => {
   streamingAssistantMessage = null;
 
   try {
-    // Send to server (fire-and-forget)
+    // 1. Send POST request FIRST (this registers the stream on server)
     await $fetch('/api/chat', {
       method: 'POST',
       body: {
@@ -299,7 +298,7 @@ const handleSend = async (text: string) => {
       },
     });
 
-    // Connect to SSE for real-time streaming
+    // 2. THEN connect to SSE (stream now exists on server)
     connectToSSE();
 
     // Refresh conversation list to show updated timestamp

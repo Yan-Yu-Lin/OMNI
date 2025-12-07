@@ -50,7 +50,7 @@ export function saveUserMessage(conversationId: string, message: UIMessage) {
 /**
  * Convert model messages to UIMessages and save them to the database
  * This is called from onStepFinish and onFinish callbacks
- * Uses UPSERT to avoid duplicate rows for the same assistant message
+ * Uses UPSERT to update existing messages by their AI SDK message.id
  */
 export function saveAssistantMessages(
   conversationId: string,
@@ -70,9 +70,9 @@ export function saveAssistantMessages(
       updated_at = CURRENT_TIMESTAMP
   `);
 
-  // Convert model messages to a format we can store
+  // Store each assistant message separately by its own ID
   for (const msg of assistantMessages) {
-    // Use the AI SDK's message.id if available, only generate nanoid if truly missing
+    // Use the AI SDK's message.id - this ensures proper upsert behavior
     const messageId = msg.id || nanoid();
 
     // Handle content - can be string or array
