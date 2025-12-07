@@ -13,7 +13,6 @@ import {
   setConversationStatus,
   autoGenerateTitle,
 } from '../utils/chat-persistence';
-import { streamManager } from '../utils/stream-manager';
 
 interface ChatRequestBody {
   messages: UIMessage[];
@@ -80,15 +79,12 @@ export default defineEventHandler(async (event) => {
   // 2. Set conversation status to streaming
   setConversationStatus(conversationId, 'streaming');
 
-  // 3. Register stream with StreamManager for SSE broadcasting
-  streamManager.register(conversationId);
-
   const openrouter = getOpenRouterClient();
 
   // Use provided model or default
   const selectedModel = model || 'moonshotai/kimi-k2-0905';
 
-  // 4. Start AI processing with callbacks (fire-and-forget)
+  // 3. Start AI streaming
   const result = streamText({
     model: openrouter(selectedModel, {
       // Route to Groq as the preferred provider for this model
@@ -104,82 +100,116 @@ export default defineEventHandler(async (event) => {
     tools,
     stopWhen: stepCountIs(10), // Allow up to 10 tool steps for complex queries
 
-    // Called after each step - only save tool results here, not messages
-    // (to avoid duplicates with onFinish)
+    // Called after each step - save tool results for partial progress
     onStepFinish: async ({ response }) => {
       console.log('[Chat API] Step finished');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const msgs = response.messages as any[];
-      // Only save tool results during steps (for partial progress)
+      // Save tool results during steps (for partial progress)
       saveToolResults(conversationId, msgs);
     },
 
-    // Called when the entire stream is complete - save final messages here
-    onFinish: async ({ response }) => {
-      console.log('[Chat API] Stream finished, finalizing...');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const msgs = response.messages as any[];
-      // Final save of all messages (only once, to avoid duplicates)
-      saveAssistantMessages(conversationId, msgs);
-      saveToolResults(conversationId, msgs);
-      // Set status back to idle
-      setConversationStatus(conversationId, 'idle');
-      // Notify SSE clients that stream is complete
-      streamManager.complete(conversationId);
-    },
-
-    // Called when an error occurs
+    // Called when an error occurs during streaming
     onError: ({ error }) => {
       console.error('[Chat API] Stream error:', error);
       setConversationStatus(conversationId, 'error');
-      // Notify SSE clients of error
-      streamManager.error(conversationId, error.message || 'Stream error');
     },
   });
 
-  // Consume the stream in the background (required for callbacks to fire)
-  // Fire-and-forget: wrap in async IIFE
-  (async () => {
-    try {
-      for await (const part of result.fullStream) {
-        switch (part.type) {
-          case 'text-delta':
-            streamManager.broadcast(conversationId, {
-              type: 'text-delta',
-              content: part.textDelta,
-            });
-            break;
-          case 'tool-call':
-            streamManager.broadcast(conversationId, {
-              type: 'tool-call',
-              toolName: part.toolName,
-              toolCallId: part.toolCallId,
-              args: part.args,
-            });
-            break;
-          case 'tool-result':
-            streamManager.broadcast(conversationId, {
+  // 4. Return the SDK's streaming response with server-side consumption
+  // This "tees" the stream: one copy goes to browser, one is consumed server-side
+  return result.toUIMessageStreamResponse({
+    // Original messages for proper message ID handling
+    originalMessages: messages,
+
+    // consumeSseStream runs server-side INDEPENDENT of browser connection
+    // Even if browser closes tab, this keeps running for persistence
+    consumeSseStream: async ({ stream }) => {
+      const reader = stream.getReader();
+      try {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+          // We just consume the stream to keep it running
+          // The actual parsing and persistence happens in onFinish
+        }
+      } catch (err) {
+        console.error('[Chat API] consumeSseStream error:', err);
+        // Don't set error status here - onFinish will handle it
+      } finally {
+        reader.releaseLock();
+      }
+    },
+
+    // onFinish fires when stream completes (even if client disconnects)
+    onFinish: async ({ responseMessage, isAborted }) => {
+      console.log('[Chat API] Stream finished', { isAborted });
+
+      // Convert the responseMessage parts to our format and save
+      if (responseMessage && responseMessage.parts) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const formattedParts: any[] = [];
+
+        for (const part of responseMessage.parts) {
+          if (part.type === 'text') {
+            formattedParts.push({ type: 'text', text: part.text });
+          } else if (part.type.startsWith('tool-')) {
+            // Tool parts come through with type like 'tool-web_search'
+            formattedParts.push(part);
+          } else if (part.type === 'reasoning') {
+            formattedParts.push({ type: 'reasoning', text: (part as { text: string }).text });
+          }
+        }
+
+        // Create a mock response.messages array for saveAssistantMessages
+        const mockMessages = [{
+          id: responseMessage.id,
+          role: 'assistant' as const,
+          content: formattedParts.map(p => {
+            if (p.type === 'text') {
+              return { type: 'text', text: p.text };
+            } else if (p.type.startsWith('tool-')) {
+              return {
+                type: 'tool-call',
+                toolCallId: p.toolCallId,
+                toolName: p.toolName,
+                args: p.input,
+              };
+            }
+            return p;
+          }),
+        }];
+
+        saveAssistantMessages(conversationId, mockMessages);
+
+        // Also save any tool results
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const toolParts = responseMessage.parts.filter((p: any) =>
+          p.type.startsWith('tool-') && p.state === 'output-available'
+        );
+
+        if (toolParts.length > 0) {
+          const mockToolMessages = [{
+            role: 'tool' as const,
+            content: toolParts.map((p: { toolCallId: string; output: unknown }) => ({
               type: 'tool-result',
-              toolCallId: part.toolCallId,
-              result: part.result,
-            });
-            break;
-          case 'error':
-            streamManager.broadcast(conversationId, {
-              type: 'error',
-              error: part.error,
-            });
-            break;
+              toolCallId: p.toolCallId,
+              result: p.output,
+            })),
+          }];
+          saveToolResults(conversationId, mockToolMessages);
         }
       }
-    } catch (err) {
-      console.error('[Chat API] Stream error:', err);
-      setConversationStatus(conversationId, 'error');
-      const errorMessage = err instanceof Error ? err.message : 'Stream error';
-      streamManager.error(conversationId, errorMessage);
-    }
-  })();
 
-  // 5. Return immediately (fire-and-forget)
-  return { success: true, conversationId };
+      // Set status back to idle (or error if aborted unexpectedly)
+      setConversationStatus(conversationId, isAborted ? 'error' : 'idle');
+    },
+
+    // Handle errors during streaming
+    onError: (error) => {
+      console.error('[Chat API] toUIMessageStreamResponse error:', error);
+      return 'An error occurred during streaming.';
+    },
+  });
 });
