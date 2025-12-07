@@ -113,20 +113,22 @@ const initializeChat = (initialMessages: UIMessage[]) => {
   // so we poll to sync the state
   syncInterval = setInterval(() => {
     if (chat.value) {
-      // Only update if there's an actual change
       const currentMessages = chat.value.messages;
       const currentStatus = chat.value.status;
 
-      if (currentMessages.length !== chatMessages.value.length ||
-          JSON.stringify(currentMessages) !== JSON.stringify(chatMessages.value)) {
-        chatMessages.value = [...currentMessages];
-      }
+      // Debug logging to diagnose streaming issues
+      const lastMsg = currentMessages[currentMessages.length - 1];
+      const lastPart = lastMsg?.parts?.[lastMsg.parts.length - 1];
+      console.log('[Sync] Status:', currentStatus, 'Msgs:', currentMessages.length,
+        'LastPartType:', lastPart?.type,
+        'TextLen:', lastPart?.type === 'text' ? (lastPart as { text: string }).text?.length : 'N/A');
 
-      if (currentStatus !== chatStatus.value) {
-        chatStatus.value = currentStatus;
-      }
+      // Always update - let Vue handle the diffing
+      // The JSON.stringify comparison was potentially missing incremental updates
+      chatMessages.value = [...currentMessages];
+      chatStatus.value = currentStatus;
     }
-  }, 16); // ~60fps for smooth streaming
+  }, 100); // 100ms is sufficient for smooth updates
 };
 
 // Load conversation from server

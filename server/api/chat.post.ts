@@ -1,5 +1,6 @@
 import {
   streamText,
+  consumeStream,
   type UIMessage,
   convertToModelMessages,
   stepCountIs,
@@ -124,23 +125,8 @@ export default defineEventHandler(async (event) => {
 
     // consumeSseStream runs server-side INDEPENDENT of browser connection
     // Even if browser closes tab, this keeps running for persistence
-    consumeSseStream: async ({ stream }) => {
-      const reader = stream.getReader();
-      try {
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const { done } = await reader.read();
-          if (done) break;
-          // We just consume the stream to keep it running
-          // The actual parsing and persistence happens in onFinish
-        }
-      } catch (err) {
-        console.error('[Chat API] consumeSseStream error:', err);
-        // Don't set error status here - onFinish will handle it
-      } finally {
-        reader.releaseLock();
-      }
-    },
+    // Using SDK's consumeStream helper which properly removes backpressure
+    consumeSseStream: consumeStream,
 
     // onFinish fires when stream completes (even if client disconnects)
     onFinish: async ({ responseMessage, isAborted }) => {
