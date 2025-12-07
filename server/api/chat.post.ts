@@ -6,10 +6,17 @@ import {
 } from 'ai';
 import { getOpenRouterClient } from '../utils/openrouter';
 import { tools } from '../tools';
+import {
+  saveUserMessage,
+  saveAssistantMessages,
+  saveToolResults,
+  setConversationStatus,
+  autoGenerateTitle,
+} from '../utils/chat-persistence';
 
 interface ChatRequestBody {
   messages: UIMessage[];
-  conversationId?: string;
+  conversationId: string;
   model?: string;
 }
 
@@ -32,15 +39,11 @@ Always summarize the information you find in a helpful way for the user.`;
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<ChatRequestBody>(event);
-  const { messages, model } = body;
+  const { messages, conversationId, model } = body;
 
   // Debug: Log what we received
-  console.log('[Chat API] Received body:', JSON.stringify(body, null, 2));
-  console.log('[Chat API] Messages type:', typeof messages, Array.isArray(messages));
+  console.log('[Chat API] Received request for conversation:', conversationId);
   console.log('[Chat API] Messages count:', messages?.length);
-  if (messages?.[0]) {
-    console.log('[Chat API] First message:', JSON.stringify(messages[0], null, 2));
-  }
 
   if (!messages || !Array.isArray(messages)) {
     throw createError({
@@ -49,11 +52,40 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  if (!conversationId) {
+    throw createError({
+      statusCode: 400,
+      message: 'Conversation ID is required',
+    });
+  }
+
+  // Get the latest user message (the one being sent now)
+  const userMessage = messages[messages.length - 1];
+  if (!userMessage || userMessage.role !== 'user') {
+    throw createError({
+      statusCode: 400,
+      message: 'Last message must be from user',
+    });
+  }
+
+  // 1. Save the user message to DB first
+  saveUserMessage(conversationId, userMessage);
+
+  // Auto-generate title if this is the first message
+  if (messages.length === 1) {
+    autoGenerateTitle(conversationId, userMessage);
+  }
+
+  // 2. Set conversation status to streaming
+  setConversationStatus(conversationId, 'streaming');
+
   const openrouter = getOpenRouterClient();
 
   // Use provided model or default
   const selectedModel = model || 'moonshotai/kimi-k2-0905';
 
+  // 3. Start AI processing with callbacks (fire-and-forget)
+  // The stream is consumed in the background via callbacks
   const result = streamText({
     model: openrouter(selectedModel, {
       // Route to Groq as the preferred provider for this model
@@ -68,7 +100,46 @@ export default defineEventHandler(async (event) => {
     messages: convertToModelMessages(messages),
     tools,
     stopWhen: stepCountIs(10), // Allow up to 10 tool steps for complex queries
+
+    // Called after each step (tool call or text generation)
+    onStepFinish: async ({ response }) => {
+      console.log('[Chat API] Step finished, saving messages...');
+      // Cast to unknown first then to our expected type
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages = response.messages as any[];
+      // Save assistant messages (text and tool calls)
+      saveAssistantMessages(conversationId, messages);
+      // Save tool results if any
+      saveToolResults(conversationId, messages);
+    },
+
+    // Called when the entire stream is complete
+    onFinish: async ({ response }) => {
+      console.log('[Chat API] Stream finished, finalizing...');
+      // Cast to unknown first then to our expected type
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages = response.messages as any[];
+      // Final save of all messages
+      saveAssistantMessages(conversationId, messages);
+      saveToolResults(conversationId, messages);
+      // Set status back to idle
+      setConversationStatus(conversationId, 'idle');
+    },
+
+    // Called when an error occurs
+    onError: ({ error }) => {
+      console.error('[Chat API] Stream error:', error);
+      setConversationStatus(conversationId, 'error');
+    },
   });
 
-  return result.toUIMessageStreamResponse();
+  // Consume the stream in the background (required for callbacks to fire)
+  // We use the text promise which forces the stream to be fully consumed
+  result.text.catch((err) => {
+    console.error('[Chat API] Error consuming stream:', err);
+    setConversationStatus(conversationId, 'error');
+  });
+
+  // 4. Return immediately (fire-and-forget)
+  return { success: true, conversationId };
 });

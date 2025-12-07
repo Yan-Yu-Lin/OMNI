@@ -2,10 +2,13 @@
 export type { UIMessage } from 'ai';
 
 // Conversation types
+export type ConversationStatus = 'idle' | 'streaming' | 'error';
+
 export interface Conversation {
   id: string;
   title: string;
   model: string | null;
+  status: ConversationStatus;
   createdAt: string;
   updatedAt: string;
 }

@@ -19,13 +19,14 @@ export default defineEventHandler(async (event) => {
   `).run(id, title, model);
 
   const conversation = db.prepare(`
-    SELECT id, title, model, created_at, updated_at
+    SELECT id, title, model, status, created_at, updated_at
     FROM conversations
     WHERE id = ?
   `).get(id) as {
     id: string;
     title: string;
     model: string | null;
+    status: string;
     created_at: string;
     updated_at: string;
   };
@@ -34,6 +35,7 @@ export default defineEventHandler(async (event) => {
     id: conversation.id,
     title: conversation.title,
     model: conversation.model,
+    status: conversation.status,
     createdAt: conversation.created_at,
     updatedAt: conversation.updated_at,
   };

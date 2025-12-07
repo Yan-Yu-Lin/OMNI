@@ -1,3 +1,14 @@
+/**
+ * @deprecated This composable is no longer used.
+ *
+ * The chat interface has been refactored to use server-side orchestration:
+ * - Server handles all AI processing and saves directly to DB
+ * - Client polls for updates instead of receiving streams
+ * - See app/pages/chat/[id].vue for the new implementation
+ *
+ * This file is kept for reference purposes only.
+ */
+
 import { Chat } from '@ai-sdk/vue';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import type { ChatStatus } from 'ai';
@@ -9,6 +20,10 @@ interface UseAppChatOptions {
   onMessagesChange?: (messages: UIMessage[]) => void;
 }
 
+/**
+ * @deprecated Use server-side orchestration instead.
+ * Client now polls for conversation updates.
+ */
 export function useAppChat(options: UseAppChatOptions) {
   // Create reactive refs for SSR compatibility
   // These will be populated with actual values on the client

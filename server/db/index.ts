@@ -16,6 +16,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL DEFAULT 'New Conversation',
     model TEXT,
+    status TEXT NOT NULL DEFAULT 'idle',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -37,5 +38,17 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
 `);
+
+// Migration: Add status column to existing conversations table if it doesn't exist
+try {
+  const tableInfo = db.prepare("PRAGMA table_info(conversations)").all() as { name: string }[];
+  const hasStatusColumn = tableInfo.some(col => col.name === 'status');
+  if (!hasStatusColumn) {
+    db.exec("ALTER TABLE conversations ADD COLUMN status TEXT NOT NULL DEFAULT 'idle'");
+    console.log('[DB Migration] Added status column to conversations table');
+  }
+} catch (e) {
+  console.error('[DB Migration] Error checking/adding status column:', e);
+}
 
 export default db;

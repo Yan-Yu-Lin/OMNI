@@ -62,6 +62,7 @@ export function useConversations() {
           id: existing.id,
           title: data.title ?? existing.title,
           model: data.model !== undefined ? data.model : existing.model,
+          status: existing.status,
           createdAt: existing.createdAt,
           updatedAt: existing.updatedAt,
         };

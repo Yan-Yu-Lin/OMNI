@@ -1,9 +1,12 @@
 // Type definitions for database records
 
+export type ConversationStatus = 'idle' | 'streaming' | 'error';
+
 export interface ConversationRecord {
   id: string;
   title: string;
   model: string | null;
+  status: ConversationStatus;
   created_at: string;
   updated_at: string;
 }

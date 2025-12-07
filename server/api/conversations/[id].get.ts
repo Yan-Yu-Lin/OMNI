@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const conversation = db.prepare(`
-    SELECT id, title, model, created_at, updated_at
+    SELECT id, title, model, status, created_at, updated_at
     FROM conversations
     WHERE id = ?
   `).get(id) as ConversationRecord | undefined;
@@ -35,6 +35,7 @@ export default defineEventHandler(async (event) => {
     id: conversation.id,
     title: conversation.title,
     model: conversation.model,
+    status: conversation.status,
     createdAt: conversation.created_at,
     updatedAt: conversation.updated_at,
     messages: messages.map(msg => ({

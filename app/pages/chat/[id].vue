@@ -26,8 +26,9 @@
 </template>
 
 <script setup lang="ts">
+import { nanoid } from 'nanoid';
 import type { UIMessage } from 'ai';
-import type { ConversationWithMessages } from '~/types';
+import type { ConversationWithMessages, ConversationStatus } from '~/types';
 
 const route = useRoute();
 const router = useRouter();
@@ -41,77 +42,32 @@ const {
   getConversation,
   createConversation,
   deleteConversation,
-  saveMessages,
-  updateConversation,
 } = useConversations();
 
 // Chat state
 const loadingChat = ref(true);
-const initialMessages = ref<UIMessage[]>([]);
-const conversationData = ref<ConversationWithMessages | null>(null);
+const messages = ref<UIMessage[]>([]);
+const conversationStatus = ref<ConversationStatus>('idle');
 
-// Track if we've done the initial title update
-const hasTitleBeenSet = ref(false);
+// Polling interval reference
+let pollInterval: ReturnType<typeof setInterval> | undefined;
 
-// Debounce timer for saving messages
-let saveTimeout: ReturnType<typeof setTimeout> | undefined;
+// Computed streaming state based on conversation status
+const isStreaming = computed(() => conversationStatus.value === 'streaming');
 
-// Debounced save function
-const debouncedSaveMessages = (msgs: UIMessage[]) => {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-  }
-  saveTimeout = setTimeout(() => {
-    if (msgs.length > 0 && conversationId.value) {
-      saveMessages(conversationId.value, msgs);
-    }
-  }, 1000); // 1 second debounce
-};
-
-// Initialize chat with reactive refs for proper conversation switching
-// The composable will watch these refs and recreate the Chat instance when conversationId changes
-const { messages, sendMessage, isStreaming, status } = useAppChat({
-  conversationId: conversationId,
-  initialMessages: initialMessages,
-  onMessagesChange: (newMessages) => {
-    debouncedSaveMessages(newMessages);
-
-    // Auto-generate title after first exchange (2 messages: user + AI)
-    if (newMessages.length === 2 && !hasTitleBeenSet.value) {
-      const userMessage = newMessages[0];
-      if (userMessage?.parts?.[0]) {
-        const firstPart = userMessage.parts[0];
-        if (firstPart.type === 'text' && 'text' in firstPart) {
-          const text = firstPart.text;
-          const title = text.slice(0, 50) + (text.length > 50 ? '...' : '');
-          updateConversation(conversationId.value, { title });
-          hasTitleBeenSet.value = true;
-          // Refresh conversation list to show new title
-          fetchConversations();
-        }
-      }
-    }
-  },
-});
-
-// Load conversation
+// Load conversation from server
 const loadConversation = async () => {
   loadingChat.value = true;
-  hasTitleBeenSet.value = false;
-
-  // Clear initial messages first - this signals to the composable that
-  // we're loading new data and need to recreate the Chat instance
-  initialMessages.value = [];
+  messages.value = [];
 
   const conv = await getConversation(conversationId.value);
   if (conv) {
-    conversationData.value = conv;
-    // Update initialMessages ref - the composable will detect this change
-    // and recreate the Chat instance with the loaded messages
-    initialMessages.value = conv.messages;
-    // Check if this conversation already has a non-default title
-    if (conv.title !== 'New Conversation') {
-      hasTitleBeenSet.value = true;
+    messages.value = conv.messages;
+    conversationStatus.value = conv.status;
+
+    // If conversation is still streaming, start polling
+    if (conv.status === 'streaming') {
+      startPolling();
     }
   } else {
     // Conversation not found, redirect to home
@@ -122,8 +78,84 @@ const loadConversation = async () => {
   loadingChat.value = false;
 };
 
-const handleSend = (text: string) => {
-  sendMessage(text);
+// Poll for conversation updates
+const pollConversation = async () => {
+  try {
+    const conv = await getConversation(conversationId.value);
+    if (conv) {
+      messages.value = conv.messages;
+      conversationStatus.value = conv.status;
+
+      // Stop polling when no longer streaming
+      if (conv.status !== 'streaming') {
+        stopPolling();
+        // Refresh conversation list to show updated title/timestamp
+        fetchConversations();
+      }
+    }
+  } catch (err) {
+    console.error('[Chat] Polling error:', err);
+  }
+};
+
+// Start polling for updates
+const startPolling = () => {
+  if (pollInterval) return; // Already polling
+
+  console.log('[Chat] Starting polling for conversation updates');
+  pollInterval = setInterval(pollConversation, 2000); // Poll every 2 seconds
+};
+
+// Stop polling
+const stopPolling = () => {
+  if (pollInterval) {
+    console.log('[Chat] Stopping polling');
+    clearInterval(pollInterval);
+    pollInterval = undefined;
+  }
+};
+
+// Send a message
+const handleSend = async (text: string) => {
+  // Check if already streaming
+  if (conversationStatus.value === 'streaming') {
+    console.warn('[Chat] Already streaming, ignoring send request');
+    return;
+  }
+
+  // Create user message locally for immediate display
+  const userMessage: UIMessage = {
+    id: nanoid(),
+    role: 'user',
+    parts: [{ type: 'text', text }],
+  };
+
+  // Add to local messages
+  const newMessages = [...messages.value, userMessage];
+  messages.value = newMessages;
+
+  // Optimistically set to streaming
+  conversationStatus.value = 'streaming';
+
+  try {
+    // Send to server (fire-and-forget)
+    await $fetch('/api/chat', {
+      method: 'POST',
+      body: {
+        conversationId: conversationId.value,
+        messages: newMessages,
+      },
+    });
+
+    // Start polling for AI response
+    startPolling();
+
+    // Refresh conversation list to show updated timestamp
+    fetchConversations();
+  } catch (err) {
+    console.error('[Chat] Error sending message:', err);
+    conversationStatus.value = 'error';
+  }
 };
 
 const handleNewChat = async () => {
@@ -133,6 +165,7 @@ const handleNewChat = async () => {
 
 const handleSelectConversation = (id: string) => {
   if (id !== conversationId.value) {
+    stopPolling(); // Stop polling current conversation
     router.push(`/chat/${id}`);
   }
 };
@@ -142,6 +175,7 @@ const handleDeleteConversation = async (id: string) => {
 
   // If deleted current, go to home or another conversation
   if (id === conversationId.value) {
+    stopPolling();
     const firstConversation = conversations.value[0];
     if (firstConversation) {
       router.push(`/chat/${firstConversation.id}`);
@@ -161,13 +195,12 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(() => {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-  }
+  stopPolling();
 });
 
 // Reload when conversation changes (handles navigation between conversations)
 watch(conversationId, () => {
+  stopPolling();
   loadConversation();
 });
 </script>
