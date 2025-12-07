@@ -13,6 +13,7 @@ import {
   setConversationStatus,
   autoGenerateTitle,
 } from '../utils/chat-persistence';
+import { streamManager } from '../utils/stream-manager';
 
 interface ChatRequestBody {
   messages: UIMessage[];
@@ -79,13 +80,15 @@ export default defineEventHandler(async (event) => {
   // 2. Set conversation status to streaming
   setConversationStatus(conversationId, 'streaming');
 
+  // 3. Register stream with StreamManager for SSE broadcasting
+  streamManager.register(conversationId);
+
   const openrouter = getOpenRouterClient();
 
   // Use provided model or default
   const selectedModel = model || 'moonshotai/kimi-k2-0905';
 
-  // 3. Start AI processing with callbacks (fire-and-forget)
-  // The stream is consumed in the background via callbacks
+  // 4. Start AI processing with callbacks (fire-and-forget)
   const result = streamText({
     model: openrouter(selectedModel, {
       // Route to Groq as the preferred provider for this model
@@ -101,45 +104,72 @@ export default defineEventHandler(async (event) => {
     tools,
     stopWhen: stepCountIs(10), // Allow up to 10 tool steps for complex queries
 
-    // Called after each step (tool call or text generation)
-    onStepFinish: async ({ response }) => {
-      console.log('[Chat API] Step finished, saving messages...');
-      // Cast to unknown first then to our expected type
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const messages = response.messages as any[];
-      // Save assistant messages (text and tool calls)
-      saveAssistantMessages(conversationId, messages);
-      // Save tool results if any
-      saveToolResults(conversationId, messages);
+    // NEW: Token-level callback for real-time streaming via SSE
+    onChunk: ({ chunk }) => {
+      if (chunk.type === 'text-delta') {
+        // Broadcast text token to all connected SSE clients
+        streamManager.broadcast(conversationId, {
+          type: 'text-delta',
+          content: chunk.textDelta,
+        });
+      } else if (chunk.type === 'tool-call') {
+        // Broadcast tool call start
+        streamManager.broadcast(conversationId, {
+          type: 'tool-call',
+          toolName: chunk.toolName,
+          toolCallId: chunk.toolCallId,
+          args: chunk.args,
+        });
+      } else if (chunk.type === 'tool-result') {
+        // Broadcast tool result
+        streamManager.broadcast(conversationId, {
+          type: 'tool-result',
+          toolCallId: chunk.toolCallId,
+          result: chunk.result,
+        });
+      }
     },
 
-    // Called when the entire stream is complete
+    // Called after each step - only save tool results here, not messages
+    // (to avoid duplicates with onFinish)
+    onStepFinish: async ({ response }) => {
+      console.log('[Chat API] Step finished');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msgs = response.messages as any[];
+      // Only save tool results during steps (for partial progress)
+      saveToolResults(conversationId, msgs);
+    },
+
+    // Called when the entire stream is complete - save final messages here
     onFinish: async ({ response }) => {
       console.log('[Chat API] Stream finished, finalizing...');
-      // Cast to unknown first then to our expected type
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const messages = response.messages as any[];
-      // Final save of all messages
-      saveAssistantMessages(conversationId, messages);
-      saveToolResults(conversationId, messages);
+      const msgs = response.messages as any[];
+      // Final save of all messages (only once, to avoid duplicates)
+      saveAssistantMessages(conversationId, msgs);
+      saveToolResults(conversationId, msgs);
       // Set status back to idle
       setConversationStatus(conversationId, 'idle');
+      // Notify SSE clients that stream is complete
+      streamManager.complete(conversationId);
     },
 
     // Called when an error occurs
     onError: ({ error }) => {
       console.error('[Chat API] Stream error:', error);
       setConversationStatus(conversationId, 'error');
+      // Notify SSE clients of error
+      streamManager.error(conversationId, error.message || 'Stream error');
     },
   });
 
   // Consume the stream in the background (required for callbacks to fire)
-  // We use the text promise which forces the stream to be fully consumed
   result.text.catch((err) => {
     console.error('[Chat API] Error consuming stream:', err);
     setConversationStatus(conversationId, 'error');
+    streamManager.error(conversationId, err.message || 'Stream consumption error');
   });
 
-  // 4. Return immediately (fire-and-forget)
+  // 5. Return immediately (fire-and-forget)
   return { success: true, conversationId };
 });

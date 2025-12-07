@@ -28,7 +28,7 @@
 <script setup lang="ts">
 import { nanoid } from 'nanoid';
 import type { UIMessage } from 'ai';
-import type { ConversationWithMessages, ConversationStatus } from '~/types';
+import type { ConversationStatus } from '~/types';
 
 const route = useRoute();
 const router = useRouter();
@@ -49,8 +49,11 @@ const loadingChat = ref(true);
 const messages = ref<UIMessage[]>([]);
 const conversationStatus = ref<ConversationStatus>('idle');
 
-// Polling interval reference
-let pollInterval: ReturnType<typeof setInterval> | undefined;
+// SSE connection reference
+let eventSource: EventSource | null = null;
+
+// Reference to the currently streaming assistant message
+let streamingAssistantMessage: UIMessage | null = null;
 
 // Computed streaming state based on conversation status
 const isStreaming = computed(() => conversationStatus.value === 'streaming');
@@ -65,9 +68,9 @@ const loadConversation = async () => {
     messages.value = conv.messages;
     conversationStatus.value = conv.status;
 
-    // If conversation is still streaming, start polling
+    // If conversation is still streaming, connect to SSE
     if (conv.status === 'streaming') {
-      startPolling();
+      connectToSSE();
     }
   } else {
     // Conversation not found, redirect to home
@@ -78,40 +81,186 @@ const loadConversation = async () => {
   loadingChat.value = false;
 };
 
-// Poll for conversation updates
-const pollConversation = async () => {
+// Connect to SSE for real-time streaming
+const connectToSSE = () => {
+  // Close existing connection if any
+  disconnectSSE();
+
+  console.log('[Chat] Connecting to SSE stream:', conversationId.value);
+
+  eventSource = new EventSource(`/api/chat/stream/${conversationId.value}`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      handleSSEEvent(data);
+    } catch (err) {
+      console.error('[Chat] Error parsing SSE event:', err);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    console.error('[Chat] SSE error:', err);
+    disconnectSSE();
+
+    // If still marked as streaming, try to recover by fetching from DB
+    if (conversationStatus.value === 'streaming') {
+      console.log('[Chat] SSE disconnected while streaming, fetching from DB...');
+      refreshFromDB();
+    }
+  };
+};
+
+// Handle SSE events
+const handleSSEEvent = (data: {
+  type: string;
+  content?: string;
+  toolName?: string;
+  toolCallId?: string;
+  args?: unknown;
+  result?: unknown;
+  error?: string;
+}) => {
+  switch (data.type) {
+    case 'connected':
+      console.log('[Chat] SSE connected');
+      break;
+
+    case 'text-delta':
+      // Append text to the streaming assistant message
+      if (data.content) {
+        appendToAssistantMessage(data.content);
+      }
+      break;
+
+    case 'tool-call':
+      // Add tool call part to assistant message
+      if (data.toolName && data.toolCallId) {
+        addToolCallPart(data.toolName, data.toolCallId, data.args);
+      }
+      break;
+
+    case 'tool-result':
+      // Update tool part with result
+      if (data.toolCallId) {
+        updateToolResult(data.toolCallId, data.result);
+      }
+      break;
+
+    case 'complete':
+      console.log('[Chat] Stream complete');
+      conversationStatus.value = 'idle';
+      streamingAssistantMessage = null;
+      disconnectSSE();
+      // Refresh from DB to get final structured message
+      refreshFromDB();
+      break;
+
+    case 'error':
+      console.error('[Chat] Stream error:', data.error);
+      conversationStatus.value = 'error';
+      streamingAssistantMessage = null;
+      disconnectSSE();
+      break;
+  }
+};
+
+// Append text to the current streaming assistant message
+const appendToAssistantMessage = (text: string) => {
+  if (!streamingAssistantMessage) {
+    // Create new assistant message if none exists
+    streamingAssistantMessage = {
+      id: nanoid(),
+      role: 'assistant',
+      parts: [{ type: 'text', text: '' }],
+    };
+    messages.value = [...messages.value, streamingAssistantMessage];
+  }
+
+  // Find the text part and append
+  const textPart = streamingAssistantMessage.parts?.find(p => p.type === 'text');
+  if (textPart && 'text' in textPart) {
+    textPart.text += text;
+    // Trigger reactivity
+    messages.value = [...messages.value];
+  }
+};
+
+// Add a tool call part to the assistant message
+const addToolCallPart = (toolName: string, toolCallId: string, args: unknown) => {
+  if (!streamingAssistantMessage) {
+    streamingAssistantMessage = {
+      id: nanoid(),
+      role: 'assistant',
+      parts: [],
+    };
+    messages.value = [...messages.value, streamingAssistantMessage];
+  }
+
+  // Add tool-invocation part
+  streamingAssistantMessage.parts = [
+    ...(streamingAssistantMessage.parts || []),
+    {
+      type: 'tool-invocation',
+      toolInvocation: {
+        toolCallId,
+        toolName,
+        args,
+        state: 'call',
+      },
+    } as UIMessage['parts'][0],
+  ];
+
+  // Trigger reactivity
+  messages.value = [...messages.value];
+};
+
+// Update tool part with result
+const updateToolResult = (toolCallId: string, result: unknown) => {
+  if (!streamingAssistantMessage) return;
+
+  // Find the tool part and update it
+  const toolPart = streamingAssistantMessage.parts?.find(
+    (p) => p.type === 'tool-invocation' &&
+           'toolInvocation' in p &&
+           p.toolInvocation.toolCallId === toolCallId
+  );
+
+  if (toolPart && 'toolInvocation' in toolPart) {
+    toolPart.toolInvocation.state = 'result';
+    toolPart.toolInvocation.result = result;
+    // Trigger reactivity
+    messages.value = [...messages.value];
+  }
+};
+
+// Disconnect SSE
+const disconnectSSE = () => {
+  if (eventSource) {
+    console.log('[Chat] Disconnecting SSE');
+    eventSource.close();
+    eventSource = null;
+  }
+};
+
+// Refresh from DB (fallback)
+const refreshFromDB = async () => {
   try {
     const conv = await getConversation(conversationId.value);
     if (conv) {
       messages.value = conv.messages;
       conversationStatus.value = conv.status;
 
-      // Stop polling when no longer streaming
-      if (conv.status !== 'streaming') {
-        stopPolling();
+      // If still streaming, reconnect to SSE
+      if (conv.status === 'streaming') {
+        connectToSSE();
+      } else {
         // Refresh conversation list to show updated title/timestamp
         fetchConversations();
       }
     }
   } catch (err) {
-    console.error('[Chat] Polling error:', err);
-  }
-};
-
-// Start polling for updates
-const startPolling = () => {
-  if (pollInterval) return; // Already polling
-
-  console.log('[Chat] Starting polling for conversation updates');
-  pollInterval = setInterval(pollConversation, 2000); // Poll every 2 seconds
-};
-
-// Stop polling
-const stopPolling = () => {
-  if (pollInterval) {
-    console.log('[Chat] Stopping polling');
-    clearInterval(pollInterval);
-    pollInterval = undefined;
+    console.error('[Chat] Error refreshing from DB:', err);
   }
 };
 
@@ -137,6 +286,9 @@ const handleSend = async (text: string) => {
   // Optimistically set to streaming
   conversationStatus.value = 'streaming';
 
+  // Reset streaming assistant message
+  streamingAssistantMessage = null;
+
   try {
     // Send to server (fire-and-forget)
     await $fetch('/api/chat', {
@@ -147,8 +299,8 @@ const handleSend = async (text: string) => {
       },
     });
 
-    // Start polling for AI response
-    startPolling();
+    // Connect to SSE for real-time streaming
+    connectToSSE();
 
     // Refresh conversation list to show updated timestamp
     fetchConversations();
@@ -165,7 +317,7 @@ const handleNewChat = async () => {
 
 const handleSelectConversation = (id: string) => {
   if (id !== conversationId.value) {
-    stopPolling(); // Stop polling current conversation
+    disconnectSSE(); // Disconnect from current stream
     router.push(`/chat/${id}`);
   }
 };
@@ -175,7 +327,7 @@ const handleDeleteConversation = async (id: string) => {
 
   // If deleted current, go to home or another conversation
   if (id === conversationId.value) {
-    stopPolling();
+    disconnectSSE();
     const firstConversation = conversations.value[0];
     if (firstConversation) {
       router.push(`/chat/${firstConversation.id}`);
@@ -195,12 +347,13 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(() => {
-  stopPolling();
+  disconnectSSE();
 });
 
 // Reload when conversation changes (handles navigation between conversations)
 watch(conversationId, () => {
-  stopPolling();
+  disconnectSSE();
+  streamingAssistantMessage = null;
   loadConversation();
 });
 </script>
