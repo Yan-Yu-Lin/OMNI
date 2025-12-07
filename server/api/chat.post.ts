@@ -156,10 +156,13 @@ export default defineEventHandler(async (event) => {
             if (p.type === 'text') {
               return { type: 'text', text: p.text };
             } else if (p.type.startsWith('tool-')) {
+              // Extract toolName from type (e.g., 'tool-web_search' -> 'web_search')
+              // Static tools in Vercel AI SDK don't have toolName property - it's embedded in type
+              const toolName = p.toolName || p.type.replace('tool-', '');
               return {
                 type: 'tool-call',
                 toolCallId: p.toolCallId,
-                toolName: p.toolName,
+                toolName: toolName,
                 args: p.input,
               };
             }
