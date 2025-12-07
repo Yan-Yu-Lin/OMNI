@@ -177,13 +177,20 @@ const appendToAssistantMessage = (text: string) => {
     messages.value = [...messages.value, streamingAssistantMessage];
   }
 
-  // Find the text part and append
-  const textPart = streamingAssistantMessage.parts?.find(p => p.type === 'text');
-  if (textPart && 'text' in textPart) {
-    textPart.text += text;
-    // Trigger reactivity
-    messages.value = [...messages.value];
+  const parts = streamingAssistantMessage.parts || [];
+  const lastPart = parts[parts.length - 1];
+
+  // If last part is text, append to it
+  if (lastPart && lastPart.type === 'text' && 'text' in lastPart) {
+    lastPart.text += text;
+  } else {
+    // Last part is not text (e.g., it's a tool), create new text part
+    parts.push({ type: 'text', text });
+    streamingAssistantMessage.parts = parts;
   }
+
+  // Trigger reactivity
+  messages.value = [...messages.value];
 };
 
 // Add a tool call part to the assistant message
@@ -204,7 +211,7 @@ const addToolCallPart = (toolName: string, toolCallId: string, args: unknown) =>
       type: `tool-${toolName}`,  // e.g., 'tool-scrape_url', 'tool-web_search'
       toolCallId,
       toolName,
-      state: 'call',  // 'call' during execution
+      state: 'input-available',  // Shows loading spinner during execution
       input: args,
     } as UIMessage['parts'][0],
   ];

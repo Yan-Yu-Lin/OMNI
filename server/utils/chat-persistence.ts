@@ -50,7 +50,7 @@ export function saveUserMessage(conversationId: string, message: UIMessage) {
 /**
  * Convert model messages to UIMessages and save them to the database
  * This is called from onStepFinish and onFinish callbacks
- * Uses UPSERT to update existing messages by their AI SDK message.id
+ * Consolidates ALL assistant message parts into a single message to avoid splitting
  */
 export function saveAssistantMessages(
   conversationId: string,
@@ -61,7 +61,37 @@ export function saveAssistantMessages(
 
   if (assistantMessages.length === 0) return;
 
-  // Prepare UPSERT statement once
+  // Consolidate ALL parts from ALL assistant messages into one
+  const allParts: unknown[] = [];
+
+  for (const msg of assistantMessages) {
+    // Handle content - can be string or array
+    const contentArray = typeof msg.content === 'string'
+      ? [{ type: 'text', text: msg.content }]
+      : msg.content;
+
+    for (const part of contentArray as AssistantContentPart[]) {
+      if (part.type === 'text') {
+        allParts.push({ type: 'text', text: part.text });
+      } else if (part.type === 'tool-call') {
+        allParts.push({
+          type: `tool-${part.toolName}`,
+          toolCallId: part.toolCallId,
+          toolName: part.toolName,
+          state: 'input-available',
+          input: part.args,
+        });
+      } else if (part.type === 'reasoning') {
+        allParts.push({ type: 'reasoning', text: part.text });
+      }
+    }
+  }
+
+  // Use first assistant message's ID for the consolidated message
+  const messageId = assistantMessages[0].id || nanoid();
+  const content = JSON.stringify({ parts: allParts });
+
+  // UPSERT the single consolidated message
   const upsert = db.prepare(`
     INSERT INTO messages (id, conversation_id, role, content)
     VALUES (?, ?, ?, ?)
@@ -69,42 +99,20 @@ export function saveAssistantMessages(
       content = excluded.content,
       updated_at = CURRENT_TIMESTAMP
   `);
+  upsert.run(messageId, conversationId, 'assistant', content);
 
-  // Store each assistant message separately by its own ID
-  for (const msg of assistantMessages) {
-    // Use the AI SDK's message.id - this ensures proper upsert behavior
-    const messageId = msg.id || nanoid();
-
-    // Handle content - can be string or array
-    const contentArray = typeof msg.content === 'string'
-      ? [{ type: 'text', text: msg.content }]
-      : msg.content;
-
-    // Build parts from the content array
-    const parts = (contentArray as AssistantContentPart[]).map((part) => {
-      if (part.type === 'text') {
-        return { type: 'text', text: part.text };
-      } else if (part.type === 'tool-call') {
-        // Tool call part - store tool name, call id, and args
-        return {
-          type: `tool-${part.toolName}`,
-          toolCallId: part.toolCallId,
-          toolName: part.toolName,
-          state: 'input-available',
-          input: part.args,
-        };
-      } else if (part.type === 'reasoning') {
-        return { type: 'reasoning', text: part.text };
-      }
-      // Skip other types for now
-      return null;
-    }).filter(Boolean);
-
-    const content = JSON.stringify({ parts });
-
-    // UPSERT: Insert or update if the message ID already exists
-    upsert.run(messageId, conversationId, 'assistant', content);
-  }
+  // Delete any other assistant messages from this response (cleanup duplicates)
+  // Only delete messages created after the last user message
+  db.prepare(`
+    DELETE FROM messages
+    WHERE conversation_id = ?
+      AND role = 'assistant'
+      AND id != ?
+      AND created_at >= (
+        SELECT MAX(created_at) FROM messages
+        WHERE conversation_id = ? AND role = 'user'
+      )
+  `).run(conversationId, messageId, conversationId);
 
   // Update conversation timestamp
   db.prepare(`
