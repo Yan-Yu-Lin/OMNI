@@ -8,6 +8,8 @@
         rows="1"
         :disabled="disabled"
         @keydown="handleKeydown"
+        @compositionstart="isComposing = true"
+        @compositionend="isComposing = false"
       />
       <button
         type="submit"
@@ -54,6 +56,7 @@ const emit = defineEmits<{
 
 const input = ref('');
 const textareaRef = ref<HTMLTextAreaElement>();
+const isComposing = ref(false);
 
 const handleSubmit = () => {
   const text = input.value.trim();
@@ -68,15 +71,16 @@ const handleSubmit = () => {
 };
 
 const handleKeydown = (e: KeyboardEvent) => {
-  // Submit on Enter (without Shift)
-  if (e.key === 'Enter' && !e.shiftKey) {
+  // Submit on Enter (without Shift), but not during IME composition
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isComposing.value) {
     e.preventDefault();
     handleSubmit();
   }
 };
 
 // Auto-resize textarea
-watch(input, () => {
+watch(input, async () => {
+  await nextTick();
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto';
     textareaRef.value.style.height =
@@ -99,7 +103,7 @@ onMounted(() => {
 
 .input-wrapper {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
   background: #fff;
   border: 1px solid #e0e0e0;
