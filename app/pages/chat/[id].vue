@@ -3,12 +3,21 @@
     Loading conversation...
   </div>
 
-  <ChatContainer
-    v-else
-    :messages="chatMessages"
-    :is-streaming="isStreaming"
-    @send="handleSend"
-  />
+  <template v-else>
+    <!-- Chat header with model selector -->
+    <header class="chat-header">
+      <ModelsModelSelector
+        v-model="selectedModelId"
+        :models="models"
+      />
+    </header>
+
+    <ChatContainer
+      :messages="chatMessages"
+      :is-streaming="isStreaming"
+      @send="handleSend"
+    />
+  </template>
 </template>
 
 <script setup lang="ts">
@@ -22,6 +31,12 @@ const router = useRouter();
 const conversationId = computed(() => route.params.id as string);
 
 const { fetchConversations, getConversation } = useConversations();
+
+// Models composable for model selection
+const { models, fetchModels } = useModels();
+
+// Selected model - default to Claude Sonnet 4
+const selectedModelId = ref('anthropic/claude-sonnet-4');
 
 // Chat state
 const loadingChat = ref(true);
@@ -55,11 +70,12 @@ const initializeChat = (initialMessages: UIMessage[]) => {
     chat.value.stop();
   }
 
-  // Create transport with conversationId in the body
+  // Create transport with conversationId and model in the body
   const transport = new DefaultChatTransport({
     api: '/api/chat',
     body: () => ({
       conversationId: conversationId.value,
+      model: selectedModelId.value,
     }),
   });
 
@@ -105,6 +121,12 @@ const loadConversation = async () => {
   const conv = await getConversation(conversationId.value);
   if (conv) {
     conversationStatus.value = conv.status;
+    
+    // If conversation has a model, use it
+    if (conv.model) {
+      selectedModelId.value = conv.model;
+    }
+    
     initializeChat(conv.messages);
 
     // If conversation was streaming when we loaded, try to resume
@@ -170,8 +192,9 @@ const handleSend = async (text: string) => {
   }
 };
 
-// Load conversation on mount
+// Load conversation and models on mount
 onMounted(() => {
+  fetchModels();
   loadConversation();
 });
 
@@ -200,5 +223,14 @@ watch(conversationId, () => {
   justify-content: center;
   height: 100%;
   color: #666;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+  flex-shrink: 0;
 }
 </style>

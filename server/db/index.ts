@@ -64,4 +64,20 @@ try {
   console.error('[DB Migration] Error checking/adding updated_at column to messages:', e);
 }
 
+// Migration: Create cache table if it doesn't exist
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cache (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache(expires_at);
+  `);
+  console.log('[DB] Cache table ready');
+} catch (e) {
+  // Table might already exist, that's fine
+}
+
 export default db;
