@@ -23,7 +23,7 @@
             />
             <!-- Plain text for user messages -->
             <span v-else class="text-content plain-text">{{ part.text }}</span>
-            <span v-if="isStreaming && isLastTextPart(index)" class="cursor" />
+            <span v-if="isStreaming && isLastTextPart(index)" class="cursor"></span>
           </div>
 
           <!-- Web Search tool -->

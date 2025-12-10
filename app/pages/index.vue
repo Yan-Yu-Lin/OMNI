@@ -13,9 +13,10 @@
 <script setup lang="ts">
 const router = useRouter();
 const { createConversation } = useConversations();
+const { settings } = useSettings();
 
 const handleNewChat = async () => {
-  const conv = await createConversation();
+  const conv = await createConversation({ model: settings.value.model });
   router.push(`/chat/${conv.id}`);
 };
 </script>

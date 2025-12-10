@@ -29,12 +29,14 @@ const {
   deleteConversation,
 } = useConversations();
 
+const { settings, fetchSettings } = useSettings();
+
 const activeConversationId = computed(() =>
   route.params.id as string | undefined
 );
 
 const handleNewChat = async () => {
-  const conv = await createConversation();
+  const conv = await createConversation({ model: settings.value.model });
   router.push(`/chat/${conv.id}`);
 };
 
@@ -51,6 +53,7 @@ const handleDeleteConversation = async (id: string) => {
 };
 
 onMounted(() => {
+  fetchSettings();
   fetchConversations();
 });
 </script>

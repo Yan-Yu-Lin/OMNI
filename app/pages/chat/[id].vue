@@ -30,13 +30,16 @@ const router = useRouter();
 
 const conversationId = computed(() => route.params.id as string);
 
-const { fetchConversations, getConversation } = useConversations();
+const { fetchConversations, getConversation, updateConversation } = useConversations();
 
 // Models composable for model selection
 const { models, fetchModels } = useModels();
 
-// Selected model - default to Claude Sonnet 4
-const selectedModelId = ref('anthropic/claude-sonnet-4');
+// Settings composable for default model
+const { settings, fetchSettings, updateSettings } = useSettings();
+
+// Selected model - initialized from settings (will be updated when conversation loads)
+const selectedModelId = ref(settings.value.model);
 
 // Chat state
 const loadingChat = ref(true);
@@ -121,12 +124,14 @@ const loadConversation = async () => {
   const conv = await getConversation(conversationId.value);
   if (conv) {
     conversationStatus.value = conv.status;
-    
-    // If conversation has a model, use it
+
+    // Use conversation's model if set, otherwise use settings default
     if (conv.model) {
       selectedModelId.value = conv.model;
+    } else {
+      selectedModelId.value = settings.value.model;
     }
-    
+
     initializeChat(conv.messages);
 
     // If conversation was streaming when we loaded, try to resume
@@ -192,8 +197,21 @@ const handleSend = async (text: string) => {
   }
 };
 
+// Watch for model changes and save to both conversation and settings
+watch(selectedModelId, async (newModel, oldModel) => {
+  // Only save if we have an old value (to avoid initial setup triggers)
+  // and the value actually changed
+  if (oldModel && newModel !== oldModel) {
+    // Save to conversation (per-conversation model)
+    await updateConversation(conversationId.value, { model: newModel });
+    // Save as global default (for new conversations)
+    await updateSettings({ model: newModel });
+  }
+});
+
 // Load conversation and models on mount
 onMounted(() => {
+  fetchSettings();
   fetchModels();
   loadConversation();
 });

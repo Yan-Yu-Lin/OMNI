@@ -14,6 +14,18 @@ import {
   setConversationStatus,
   autoGenerateTitle,
 } from '../utils/chat-persistence';
+import db from '../db';
+import { defaultSettings } from '~/types';
+
+// Get default model from settings table, fallback to defaultSettings
+function getDefaultModel(): string {
+  try {
+    const result = db.prepare('SELECT value FROM settings WHERE key = ?').get('model') as { value: string } | undefined;
+    return result?.value || defaultSettings.model;
+  } catch {
+    return defaultSettings.model;
+  }
+}
 
 interface ChatRequestBody {
   messages: UIMessage[];
@@ -82,20 +94,12 @@ export default defineEventHandler(async (event) => {
 
   const openrouter = getOpenRouterClient();
 
-  // Use provided model or default
-  const selectedModel = model || 'moonshotai/kimi-k2-0905';
+  // Use provided model, or read default from settings
+  const selectedModel = model || getDefaultModel();
 
   // 3. Start AI streaming
   const result = streamText({
-    model: openrouter(selectedModel, {
-      // Route to Groq as the preferred provider for this model
-      extraBody: {
-        provider: {
-          order: ['groq'],
-          allow_fallbacks: true,
-        },
-      },
-    }),
+    model: openrouter(selectedModel),
     system: SYSTEM_PROMPT,
     messages: convertToModelMessages(messages),
     tools,
