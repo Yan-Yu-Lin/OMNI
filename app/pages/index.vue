@@ -66,10 +66,6 @@
           </div>
         </div>
       </form>
-
-      <p class="input-hint">
-        Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line
-      </p>
     </div>
   </div>
 </template>
@@ -178,6 +174,7 @@ onMounted(() => {
 
 <style scoped>
 .home-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -232,12 +229,16 @@ onMounted(() => {
 
 /* Unified input section - matches ChatContainer */
 .unified-input-section {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  padding: 16px 24px 12px;
-  background: linear-gradient(to top, #fafafa 0%, #fff 100%);
-  border-top: 1px solid #eaeaea;
+  padding: 16px 24px 16px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .unified-input-container {
@@ -331,21 +332,4 @@ onMounted(() => {
   transform: scale(0.98);
 }
 
-.input-hint {
-  font-size: 11px;
-  color: #a0a0a0;
-  margin-top: 8px;
-  text-align: center;
-}
-
-.input-hint kbd {
-  display: inline-block;
-  padding: 2px 6px;
-  font-family: inherit;
-  font-size: 10px;
-  background: #f0f0f0;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  margin: 0 2px;
-}
 </style>

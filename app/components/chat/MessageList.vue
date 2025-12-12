@@ -115,6 +115,7 @@ watch(
   flex: 1;
   overflow-y: auto;
   scroll-behavior: smooth;
+  padding-bottom: 140px; /* Space for floating input */
 }
 
 .empty-state {
