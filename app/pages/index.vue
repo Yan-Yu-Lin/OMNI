@@ -76,7 +76,7 @@ import type { ProviderPreferences } from '~/types';
 
 const router = useRouter();
 const { setPendingMessage } = useConversations();
-const { settings, fetchSettings, updateSettings } = useSettings();
+const { settings, fetchSettings, lastActiveModel, getModelProviderPrefs, setModelProviderPrefs } = useSettings();
 const { models, fetchModels } = useModels();
 
 // Local state
@@ -84,37 +84,34 @@ const inputText = ref('');
 const textareaRef = ref<HTMLTextAreaElement>();
 const isComposing = ref(false);
 
-// Model selection - defaults to settings
-const selectedModelId = ref(settings.value.model);
+// Model selection - defaults to last active model (set server-side when message is sent)
+const selectedModelId = ref(lastActiveModel.value);
 
-// Provider preferences - defaults to settings
+// Provider preferences - per-model (loaded based on selected model)
 const providerPreferences = ref<ProviderPreferences>(
-  settings.value.providerPreferences || { mode: 'auto', sort: 'throughput' }
+  getModelProviderPrefs(selectedModelId.value)
 );
 
-// Sync with settings once loaded
-watch(() => settings.value.model, (newModel) => {
+// Sync model with lastActiveModel once settings are loaded
+watch(lastActiveModel, (newModel) => {
   if (newModel && !selectedModelId.value) {
     selectedModelId.value = newModel;
+    // Also load provider prefs for this model
+    providerPreferences.value = getModelProviderPrefs(newModel);
   }
 });
 
-watch(() => settings.value.providerPreferences, (newPrefs) => {
-  if (newPrefs) {
-    providerPreferences.value = newPrefs;
-  }
-}, { deep: true });
-
-// Save model and provider preferences when changed
-watch(selectedModelId, async (newModel, oldModel) => {
-  if (oldModel && newModel !== oldModel) {
-    await updateSettings({ model: newModel });
+// When model selection changes, load that model's provider preferences
+watch(selectedModelId, (newModel, oldModel) => {
+  if (newModel && newModel !== oldModel) {
+    providerPreferences.value = getModelProviderPrefs(newModel);
   }
 });
 
+// When provider preferences change, save to per-model settings
 watch(providerPreferences, async (newPrefs, oldPrefs) => {
-  if (oldPrefs && JSON.stringify(newPrefs) !== JSON.stringify(oldPrefs)) {
-    await updateSettings({ providerPreferences: newPrefs });
+  if (oldPrefs && selectedModelId.value && JSON.stringify(newPrefs) !== JSON.stringify(oldPrefs)) {
+    await setModelProviderPrefs(selectedModelId.value, newPrefs);
   }
 }, { deep: true });
 
@@ -260,7 +257,8 @@ onMounted(() => {
 }
 
 .unified-input-container textarea {
-  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
   border: none;
   background: transparent;
   resize: none;
@@ -268,6 +266,7 @@ onMounted(() => {
   font-size: 15px;
   line-height: 1.5;
   color: #171717;
+  height: auto;
   min-height: 24px;
   max-height: 200px;
   overflow-y: auto;

@@ -32,14 +32,14 @@ const { fetchConversations, getConversation, updateConversation, consumePendingM
 // Models composable for model selection
 const { models, fetchModels } = useModels();
 
-// Settings composable for default model
-const { settings, fetchSettings, updateSettings } = useSettings();
+// Settings composable for default model and per-model provider prefs
+const { settings, fetchSettings, updateSettings, lastActiveModel, getModelProviderPrefs, setModelProviderPrefs } = useSettings();
 
 // Providers composable
 const { markModelSeen } = useProviders();
 
-// Selected model - initialized from settings (will be updated when conversation loads)
-const selectedModelId = ref(settings.value.model);
+// Selected model - initialized from lastActiveModel (will be updated when conversation loads)
+const selectedModelId = ref(lastActiveModel.value);
 const selectedModelName = computed(() => {
   const model = models.value.find(m => m.id === selectedModelId.value);
   return model?.name || selectedModelId.value;
@@ -149,18 +149,18 @@ const loadConversation = async () => {
     isDraftConversation.value = false;
     conversationStatus.value = conv.status;
 
-    // Use conversation's model if set, otherwise use settings default
+    // Use conversation's model if set, otherwise use lastActiveModel
     if (conv.model) {
       selectedModelId.value = conv.model;
     } else {
-      selectedModelId.value = settings.value.model;
+      selectedModelId.value = lastActiveModel.value;
     }
 
-    // Load provider preferences from conversation or settings
+    // Load provider preferences from conversation or per-model settings
     if (conv.providerPreferences) {
       providerPreferences.value = conv.providerPreferences;
-    } else if (settings.value.providerPreferences) {
-      providerPreferences.value = settings.value.providerPreferences;
+    } else {
+      providerPreferences.value = getModelProviderPrefs(selectedModelId.value);
     }
 
     initializeChat(conv.messages);
@@ -181,12 +181,10 @@ const loadConversation = async () => {
     console.log('[Chat] Conversation not in DB yet, initializing draft mode');
     isDraftConversation.value = true;
     conversationStatus.value = 'idle';
-    selectedModelId.value = settings.value.model;
+    selectedModelId.value = lastActiveModel.value;
 
-    // Load provider preferences from settings
-    if (settings.value.providerPreferences) {
-      providerPreferences.value = settings.value.providerPreferences;
-    }
+    // Load provider preferences for the selected model
+    providerPreferences.value = getModelProviderPrefs(selectedModelId.value);
 
     initializeChat([]);
   }
@@ -238,21 +236,23 @@ const handleSend = async (text: string) => {
   }
 };
 
-// Watch for model changes and save to both conversation and settings
+// Watch for model changes - save to conversation and load per-model provider prefs
 watch(selectedModelId, async (newModel, oldModel) => {
-  // Only save if we have an old value (to avoid initial setup triggers)
+  // Only act if we have an old value (to avoid initial setup triggers)
   // and the value actually changed
   if (oldModel && newModel !== oldModel) {
     // Save to conversation (per-conversation model) - only if not a draft
     if (!isDraftConversation.value) {
       await updateConversation(conversationId.value, { model: newModel });
     }
-    // Save as global default (for new conversations)
-    await updateSettings({ model: newModel });
+    // Load provider preferences for the new model
+    providerPreferences.value = getModelProviderPrefs(newModel);
+    // Note: We don't update global settings.model here anymore
+    // lastActiveModel is updated server-side when a message is sent
   }
 });
 
-// Watch for provider preference changes and save to both conversation and settings
+// Watch for provider preference changes - save to conversation and per-model settings
 watch(providerPreferences, async (newPrefs, oldPrefs) => {
   // Skip initial value and only save actual changes
   if (oldPrefs && JSON.stringify(newPrefs) !== JSON.stringify(oldPrefs)) {
@@ -260,8 +260,8 @@ watch(providerPreferences, async (newPrefs, oldPrefs) => {
     if (!isDraftConversation.value) {
       await updateConversation(conversationId.value, { providerPreferences: newPrefs });
     }
-    // Save as global default
-    await updateSettings({ providerPreferences: newPrefs });
+    // Save to per-model settings (not global)
+    await setModelProviderPrefs(selectedModelId.value, newPrefs);
   }
 }, { deep: true });
 

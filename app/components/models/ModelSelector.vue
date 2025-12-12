@@ -305,8 +305,9 @@ const providerLabel = computed(() => {
   return provider?.name || props.providerPreferences.provider || 'Custom';
 });
 
-const filteredModels = computed(() => {
-  let result = props.models;
+// Apply search and filter criteria (without slice limit)
+function applyFilters(models: Model[]): Model[] {
+  let result = models;
 
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
@@ -324,15 +325,20 @@ const filteredModels = computed(() => {
     result = result.filter(m => m.pricing.isFree);
   }
 
-  // Limit to 50 for performance
-  return result.slice(0, 50);
+  return result;
+}
+
+// Filtered models with 50-item limit for performance (used for unpinned list)
+const filteredModels = computed(() => {
+  return applyFilters(props.models).slice(0, 50);
 });
 
-// Split filtered models into pinned and unpinned
-const pinnedModelsList = computed(() =>
-  filteredModels.value.filter(m => isPinned(m.id))
-);
+// Pinned models from FULL filtered list (bypasses 50-item limit)
+const pinnedModelsList = computed(() => {
+  return applyFilters(props.models).filter(m => isPinned(m.id));
+});
 
+// Unpinned models from the sliced list
 const unpinnedModelsList = computed(() =>
   filteredModels.value.filter(m => !isPinned(m.id))
 );

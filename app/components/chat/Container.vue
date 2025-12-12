@@ -181,7 +181,8 @@ const handleModelSelected = (modelId: string, modelName: string) => {
 }
 
 .unified-input-container textarea {
-  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
   border: none;
   background: transparent;
   resize: none;
@@ -189,6 +190,7 @@ const handleModelSelected = (modelId: string, modelName: string) => {
   font-size: 15px;
   line-height: 1.5;
   color: #171717;
+  height: auto;
   min-height: 24px;
   max-height: 200px;
   overflow-y: auto;

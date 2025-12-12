@@ -136,6 +136,15 @@ export default defineEventHandler(async (event) => {
   // 2. Save the user message to DB
   saveUserMessage(conversationId, userMessage);
 
+  // 2.5 Update last active model (track which model user is actually sending messages with)
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES ('lastActiveModel', ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(selectedModel);
+
   // Auto-generate title if this is the first message (only for new conversations)
   if (isNewConversation || messages.length === 1) {
     autoGenerateTitle(conversationId, userMessage);

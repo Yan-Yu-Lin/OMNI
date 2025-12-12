@@ -1,4 +1,4 @@
-import { defaultSettings, type Settings } from '~/types';
+import { defaultSettings, type Settings, type ProviderPreferences } from '~/types';
 
 export function useSettings() {
   // Use useState for SSR-safe shared state across components
@@ -46,6 +46,23 @@ export function useSettings() {
   // Convenience computed for default model
   const defaultModel = computed(() => settings.value.model);
 
+  // Last active model (the model user last sent a message with)
+  const lastActiveModel = computed(() => settings.value.lastActiveModel || settings.value.model);
+
+  // Get provider preferences for a specific model
+  function getModelProviderPrefs(modelId: string): ProviderPreferences {
+    const perModel = settings.value.modelProviderPreferences?.[modelId];
+    return perModel || { mode: 'auto', sort: 'throughput' };
+  }
+
+  // Set provider preferences for a specific model
+  async function setModelProviderPrefs(modelId: string, prefs: ProviderPreferences): Promise<void> {
+    const current = settings.value.modelProviderPreferences || {};
+    await updateSettings({
+      modelProviderPreferences: { ...current, [modelId]: prefs },
+    });
+  }
+
   return {
     settings,
     loading,
@@ -53,5 +70,8 @@ export function useSettings() {
     fetchSettings,
     updateSettings,
     defaultModel,
+    lastActiveModel,
+    getModelProviderPrefs,
+    setModelProviderPrefs,
   };
 }

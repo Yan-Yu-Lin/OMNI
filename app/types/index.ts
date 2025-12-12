@@ -45,6 +45,10 @@ export interface Settings {
   firecrawlApiKey: string;
   providerPreferences?: ProviderPreferences;
   pinnedModels: string[];
+  /** Last model user actually sent a message with (set server-side) */
+  lastActiveModel?: string;
+  /** Per-model provider preferences (key: model ID, value: preferences) */
+  modelProviderPreferences?: Record<string, ProviderPreferences>;
 }
 
 export const defaultSettings: Settings = {
@@ -57,6 +61,7 @@ export const defaultSettings: Settings = {
   firecrawlApiKey: '',
   pinnedModels: [],
   providerPreferences: { mode: 'auto', sort: 'throughput' },
+  modelProviderPreferences: {},
 };
 
 // Chat request type
