@@ -92,4 +92,16 @@ try {
   console.error('[DB Migration] Error checking/adding provider_preferences column:', e);
 }
 
+// Migration: Add pinned column to conversations table
+try {
+  const tableInfo = db.prepare('PRAGMA table_info(conversations)').all() as { name: string }[];
+  const hasPinned = tableInfo.some(col => col.name === 'pinned');
+  if (!hasPinned) {
+    db.exec('ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
+    console.log('[DB Migration] Added pinned column to conversations table');
+  }
+} catch (e) {
+  console.error('[DB Migration] Error checking/adding pinned column:', e);
+}
+
 export default db;

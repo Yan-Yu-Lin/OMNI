@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const conversation = db.prepare(`
-    SELECT id, title, model, provider_preferences, status, created_at, updated_at
+    SELECT id, title, model, provider_preferences, status, pinned, created_at, updated_at
     FROM conversations
     WHERE id = ?
   `).get(id) as (ConversationRecord & { provider_preferences?: string }) | undefined;
@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
       ? JSON.parse(conversation.provider_preferences)
       : undefined,
     status: conversation.status,
+    pinned: conversation.pinned === 1,
     createdAt: conversation.created_at,
     updatedAt: conversation.updated_at,
     messages: messages.map(msg => ({

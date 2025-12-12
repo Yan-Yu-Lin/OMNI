@@ -8,6 +8,7 @@
           :loading="loading"
           @select="handleSelectConversation"
           @delete="handleDeleteConversation"
+          @pin="handlePinConversation"
         />
       </LayoutSidebar>
     </aside>
@@ -18,6 +19,8 @@
 </template>
 
 <script setup lang="ts">
+import { nanoid } from 'nanoid';
+
 const route = useRoute();
 const router = useRouter();
 
@@ -25,19 +28,21 @@ const {
   conversations,
   loading,
   fetchConversations,
-  createConversation,
   deleteConversation,
+  togglePin,
 } = useConversations();
 
-const { settings, fetchSettings } = useSettings();
+const { fetchSettings } = useSettings();
 
 const activeConversationId = computed(() =>
   route.params.id as string | undefined
 );
 
-const handleNewChat = async () => {
-  const conv = await createConversation({ model: settings.value.model });
-  router.push(`/chat/${conv.id}`);
+// Lazy conversation creation: generate ID client-side and navigate directly
+// Conversation will be created in DB when first message is sent
+const handleNewChat = () => {
+  const newId = nanoid();
+  router.push(`/chat/${newId}`);
 };
 
 const handleSelectConversation = (id: string) => {
@@ -50,6 +55,10 @@ const handleDeleteConversation = async (id: string) => {
     const first = conversations.value[0];
     router.push(first ? `/chat/${first.id}` : '/');
   }
+};
+
+const handlePinConversation = async (id: string) => {
+  await togglePin(id);
 };
 
 onMounted(() => {

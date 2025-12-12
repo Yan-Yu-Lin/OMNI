@@ -25,6 +25,7 @@ export interface Conversation {
   model: string | null;
   providerPreferences?: ProviderPreferences;
   status: ConversationStatus;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 }

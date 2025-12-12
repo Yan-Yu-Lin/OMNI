@@ -17,6 +17,27 @@ import {
 import db from '../db';
 import { defaultSettings, type ProviderPreferences } from '~/types';
 
+/**
+ * Ensure conversation exists in database, creating it if necessary.
+ * Uses a transaction to atomically check and create.
+ * Returns true if a new conversation was created, false if it already existed.
+ */
+function ensureConversationExists(conversationId: string, model?: string): boolean {
+  const existingConv = db.prepare('SELECT id FROM conversations WHERE id = ?').get(conversationId);
+
+  if (existingConv) {
+    return false;
+  }
+
+  // Create the conversation with the provided ID
+  db.prepare(`
+    INSERT INTO conversations (id, title, model, status)
+    VALUES (?, ?, ?, ?)
+  `).run(conversationId, 'New Conversation', model || defaultSettings.model, 'idle');
+
+  return true;
+}
+
 // Get default model from settings table, fallback to defaultSettings
 function getDefaultModel(): string {
   try {
@@ -95,21 +116,25 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // 1. Save the user message to DB first
+  // Use provided model, or read default from settings
+  const selectedModel = model || getDefaultModel();
+
+  // 1. Ensure conversation exists (creates if needed for lazy creation)
+  const isNewConversation = ensureConversationExists(conversationId, selectedModel);
+  console.log('[Chat API] Conversation exists:', !isNewConversation, 'isNew:', isNewConversation);
+
+  // 2. Save the user message to DB
   saveUserMessage(conversationId, userMessage);
 
-  // Auto-generate title if this is the first message
-  if (messages.length === 1) {
+  // Auto-generate title if this is the first message (only for new conversations)
+  if (isNewConversation || messages.length === 1) {
     autoGenerateTitle(conversationId, userMessage);
   }
 
-  // 2. Set conversation status to streaming
+  // 3. Set conversation status to streaming
   setConversationStatus(conversationId, 'streaming');
 
   const openrouter = getOpenRouterClient();
-
-  // Use provided model, or read default from settings
-  const selectedModel = model || getDefaultModel();
 
   // Build provider options from preferences
   const providerOptions = providerPreferences ? {
@@ -125,10 +150,10 @@ export default defineEventHandler(async (event) => {
     },
   } : undefined;
 
-  // 3. Create tools for this conversation (sandbox tools need conversationId)
+  // 4. Create tools for this conversation (sandbox tools need conversationId)
   const tools = createAllTools(conversationId);
 
-  // 4. Start AI streaming
+  // 5. Start AI streaming
   const result = streamText({
     model: openrouter(selectedModel, providerOptions),
     system: SYSTEM_PROMPT,

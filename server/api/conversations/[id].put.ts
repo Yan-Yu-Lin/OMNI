@@ -5,6 +5,7 @@ interface UpdateConversationBody {
   title?: string;
   model?: string;
   providerPreferences?: ProviderPreferences;
+  pinned?: boolean;
 }
 
 export default defineEventHandler(async (event) => {
@@ -19,7 +20,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const updates: string[] = [];
-  const values: (string | null)[] = [];
+  const values: (string | number | null)[] = [];
 
   if (body.title !== undefined) {
     updates.push('title = ?');
@@ -34,6 +35,11 @@ export default defineEventHandler(async (event) => {
   if (body.providerPreferences !== undefined) {
     updates.push('provider_preferences = ?');
     values.push(JSON.stringify(body.providerPreferences));
+  }
+
+  if (body.pinned !== undefined) {
+    updates.push('pinned = ?');
+    values.push(body.pinned ? 1 : 0);
   }
 
   if (updates.length === 0) {

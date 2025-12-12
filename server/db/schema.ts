@@ -7,6 +7,7 @@ export interface ConversationRecord {
   title: string;
   model: string | null;
   status: ConversationStatus;
+  pinned: number; // 0 or 1 (SQLite boolean)
   created_at: string;
   updated_at: string;
 }

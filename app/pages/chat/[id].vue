@@ -4,31 +4,17 @@
   </div>
 
   <template v-else>
-    <!-- Chat header with model selector -->
-    <header class="chat-header">
-      <ModelsModelSelector
-        v-model="selectedModelId"
-        :models="models"
-        @model-selected="handleModelSelected"
-      />
-      <button
-        v-if="selectedModelId"
-        class="provider-toggle"
-        @click="showProviderPanel = true"
-        :title="providerDisplayText"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-        <span class="provider-label">{{ providerDisplayText }}</span>
-      </button>
-    </header>
-
     <ChatContainer
       :messages="chatMessages"
       :is-streaming="isStreaming"
+      :models="models"
+      :selected-model="selectedModelId"
+      :show-provider-button="!!selectedModelId"
+      :provider-display-text="providerDisplayText"
       @send="handleSend"
+      @update:selected-model="selectedModelId = $event"
+      @model-selected="handleModelSelected"
+      @provider-click="showProviderPanel = true"
     />
 
     <!-- Provider selection panel -->
@@ -52,7 +38,7 @@ const router = useRouter();
 
 const conversationId = computed(() => route.params.id as string);
 
-const { fetchConversations, getConversation, updateConversation } = useConversations();
+const { fetchConversations, getConversation, updateConversation, consumePendingMessage } = useConversations();
 
 // Models composable for model selection
 const { models, fetchModels } = useModels();
@@ -93,6 +79,8 @@ const providerDisplayText = computed(() => {
 // Chat state
 const loadingChat = ref(true);
 const conversationStatus = ref<ConversationStatus>('idle');
+// Draft mode: conversation doesn't exist in DB yet (lazy creation)
+const isDraftConversation = ref(false);
 
 // Chat instance - will be recreated when conversation changes
 // Using shallowRef so we can track changes to the chat instance itself
@@ -140,6 +128,10 @@ const initializeChat = (initialMessages: UIMessage[]) => {
     onFinish: () => {
       console.log('[Chat] Stream finished');
       conversationStatus.value = 'idle';
+      // After first message, conversation is created in DB - no longer a draft
+      if (isDraftConversation.value) {
+        isDraftConversation.value = false;
+      }
       fetchConversations(true); // Force refresh to update title/timestamp
     },
     onError: (error) => {
@@ -188,6 +180,7 @@ const loadConversation = async () => {
 
   const conv = await getConversation(conversationId.value);
   if (conv) {
+    isDraftConversation.value = false;
     conversationStatus.value = conv.status;
 
     // Use conversation's model if set, otherwise use settings default
@@ -217,9 +210,19 @@ const loadConversation = async () => {
       }
     }
   } else {
-    // Conversation not found, redirect to home
-    router.push('/');
-    return;
+    // Conversation not found in DB - this is expected for lazy creation
+    // Initialize empty chat in "draft" mode; conversation will be created on first message
+    console.log('[Chat] Conversation not in DB yet, initializing draft mode');
+    isDraftConversation.value = true;
+    conversationStatus.value = 'idle';
+    selectedModelId.value = settings.value.model;
+
+    // Load provider preferences from settings
+    if (settings.value.providerPreferences) {
+      providerPreferences.value = settings.value.providerPreferences;
+    }
+
+    initializeChat([]);
   }
 
   loadingChat.value = false;
@@ -274,8 +277,10 @@ watch(selectedModelId, async (newModel, oldModel) => {
   // Only save if we have an old value (to avoid initial setup triggers)
   // and the value actually changed
   if (oldModel && newModel !== oldModel) {
-    // Save to conversation (per-conversation model)
-    await updateConversation(conversationId.value, { model: newModel });
+    // Save to conversation (per-conversation model) - only if not a draft
+    if (!isDraftConversation.value) {
+      await updateConversation(conversationId.value, { model: newModel });
+    }
     // Save as global default (for new conversations)
     await updateSettings({ model: newModel });
   }
@@ -285,18 +290,33 @@ watch(selectedModelId, async (newModel, oldModel) => {
 watch(providerPreferences, async (newPrefs, oldPrefs) => {
   // Skip initial value and only save actual changes
   if (oldPrefs && JSON.stringify(newPrefs) !== JSON.stringify(oldPrefs)) {
-    // Save to conversation
-    await updateConversation(conversationId.value, { providerPreferences: newPrefs });
+    // Save to conversation - only if not a draft
+    if (!isDraftConversation.value) {
+      await updateConversation(conversationId.value, { providerPreferences: newPrefs });
+    }
     // Save as global default
     await updateSettings({ providerPreferences: newPrefs });
   }
 }, { deep: true });
 
 // Load conversation and models on mount
-onMounted(() => {
+onMounted(async () => {
   fetchSettings();
   fetchModels();
-  loadConversation();
+  await loadConversation();
+
+  // Check for pending message from home page
+  const { message: pendingMsg, model: pendingModelId } = consumePendingMessage();
+  if (pendingMsg) {
+    // If a model was specified with the pending message, use it
+    if (pendingModelId) {
+      selectedModelId.value = pendingModelId;
+    }
+    // Send the pending message immediately
+    // Use nextTick to ensure chat is fully initialized
+    await nextTick();
+    handleSend(pendingMsg);
+  }
 });
 
 // Cleanup on unmount
@@ -324,41 +344,5 @@ watch(conversationId, () => {
   justify-content: center;
   height: 100%;
   color: #666;
-}
-
-.chat-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #fff;
-  flex-shrink: 0;
-}
-
-.provider-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: #f5f5f5;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  color: #666;
-  transition: all 0.1s;
-}
-
-.provider-toggle:hover {
-  background: #eee;
-  color: #333;
-}
-
-.provider-label {
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 </style>
