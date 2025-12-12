@@ -167,8 +167,9 @@ watch(inputText, async () => {
 });
 
 // Fetch data and focus on mount
+// Force refetch settings to get latest lastActiveModel (updated server-side when message is sent)
 onMounted(() => {
-  fetchSettings();
+  fetchSettings(true);
   fetchModels();
   textareaRef.value?.focus();
 });

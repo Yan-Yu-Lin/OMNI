@@ -108,6 +108,7 @@ const initializeChat = (initialMessages: UIMessage[]) => {
         isDraftConversation.value = false;
       }
       fetchConversations(true); // Force refresh to update title/timestamp
+      fetchSettings(true); // Refresh settings to get updated lastActiveModel
     },
     onError: (error) => {
       console.error('[Chat] Error:', error);
