@@ -5,6 +5,7 @@ import type {
   ModelSortOption,
   ProviderInfo
 } from '~/types';
+import { getProviderDisplayName } from '~/utils/providers';
 
 /**
  * Default filter state
@@ -307,29 +308,3 @@ function sortModels(models: Model[], sortBy: ModelSortOption): Model[] {
   }
 }
 
-function getProviderDisplayName(providerId: string): string {
-  const displayNames: Record<string, string> = {
-    'anthropic': 'Anthropic',
-    'openai': 'OpenAI',
-    'google': 'Google',
-    'meta-llama': 'Meta Llama',
-    'mistralai': 'Mistral AI',
-    'cohere': 'Cohere',
-    'deepseek': 'DeepSeek',
-    'qwen': 'Qwen',
-    'perplexity': 'Perplexity',
-    'together': 'Together AI',
-    'fireworks': 'Fireworks',
-    'groq': 'Groq',
-    'ai21': 'AI21 Labs',
-    'microsoft': 'Microsoft',
-    'x-ai': 'xAI',
-    'amazon': 'Amazon',
-    'nvidia': 'NVIDIA',
-    'databricks': 'Databricks',
-    'moonshotai': 'Moonshot AI',
-  };
-
-  return displayNames[providerId] ||
-    providerId.charAt(0).toUpperCase() + providerId.slice(1);
-}

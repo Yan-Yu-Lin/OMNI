@@ -35,7 +35,9 @@
             :key="model.id"
             :model="model"
             :is-selected="model.id === selectedModelId"
+            :is-pinned="isPinned(model.id)"
             @select="$emit('select', model.id)"
+            @toggle-pin="$emit('toggle-pin', model.id)"
           />
         </div>
       </div>
@@ -45,38 +47,25 @@
 
 <script setup lang="ts">
 import type { Model } from '~/types';
+import { getProviderDisplayName } from '~/utils/providers';
 
-defineProps<{
+const props = defineProps<{
   groupedModels: Record<string, Model[]>;
   selectedModelId?: string;
   loading: boolean;
   error: string | null;
+  pinnedModels?: string[];
 }>();
 
 defineEmits<{
   select: [modelId: string];
   retry: [];
   'reset-filters': [];
+  'toggle-pin': [modelId: string];
 }>();
 
-function getProviderDisplayName(providerId: string): string {
-  const displayNames: Record<string, string> = {
-    'anthropic': 'Anthropic',
-    'openai': 'OpenAI',
-    'google': 'Google',
-    'meta-llama': 'Meta Llama',
-    'mistralai': 'Mistral AI',
-    'cohere': 'Cohere',
-    'deepseek': 'DeepSeek',
-    'qwen': 'Qwen',
-    'perplexity': 'Perplexity',
-    'together': 'Together AI',
-    'fireworks': 'Fireworks',
-    'groq': 'Groq',
-    'moonshotai': 'Moonshot AI',
-  };
-  return displayNames[providerId] ||
-    providerId.charAt(0).toUpperCase() + providerId.slice(1);
+function isPinned(modelId: string): boolean {
+  return props.pinnedModels?.includes(modelId) ?? false;
 }
 </script>
 

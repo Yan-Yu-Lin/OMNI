@@ -21,9 +21,11 @@
       :selected-model-id="currentModelId"
       :loading="loading"
       :error="error"
-      @select="handleSelectModel"
+      :pinned-models="pinnedModels"
+      @select="handleStartChat"
       @retry="fetchModels({ force: true })"
       @reset-filters="resetFilters"
+      @toggle-pin="togglePin"
     />
   </div>
 </template>
@@ -33,6 +35,8 @@
 definePageMeta({
   layout: 'default',
 });
+
+const router = useRouter();
 
 // Get shared models state
 const {
@@ -48,14 +52,26 @@ const {
   toggleProvider,
 } = useModels();
 
-// Current selected model from settings or default
-const currentModelId = ref('anthropic/claude-sonnet-4');
+// Get pinned models state
+const { pinnedModels, togglePin } = usePinnedModels();
 
-// Handle model selection
-async function handleSelectModel(modelId: string) {
-  currentModelId.value = modelId;
-  // TODO: Save to settings when useSettings is available
-  console.log('[Models] Selected:', modelId);
+// Get settings for current model
+const { settings, updateSettings } = useSettings();
+
+// Get conversations for creating new chats
+const { createConversation } = useConversations();
+
+// Current selected model from settings
+const currentModelId = computed(() => settings.value.model);
+
+// Handle clicking a model - create conversation and navigate
+async function handleStartChat(modelId: string) {
+  try {
+    const conversation = await createConversation({ model: modelId });
+    router.push(`/chat/${conversation.id}`);
+  } catch (err) {
+    console.error('[Models] Failed to start chat:', err);
+  }
 }
 
 // Fetch models on mount

@@ -22,6 +22,18 @@ export default defineEventHandler(async () => {
       const defaultValue = defaultSettings[key];
       if (typeof defaultValue === 'number') {
         settings[key] = parseFloat(record.value) as never;
+      } else if (Array.isArray(defaultValue)) {
+        try {
+          settings[key] = JSON.parse(record.value) as never;
+        } catch {
+          settings[key] = defaultValue as never;
+        }
+      } else if (typeof defaultValue === 'object' && defaultValue !== null) {
+        try {
+          settings[key] = JSON.parse(record.value) as never;
+        } catch {
+          settings[key] = defaultValue as never;
+        }
       } else {
         settings[key] = record.value as never;
       }

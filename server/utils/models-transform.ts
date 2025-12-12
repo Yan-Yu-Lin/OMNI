@@ -155,6 +155,7 @@ export function getProviderDisplayName(providerId: string): string {
     'amazon': 'Amazon',
     'nvidia': 'NVIDIA',
     'databricks': 'Databricks',
+    'moonshotai': 'Moonshot AI',
   };
 
   return displayNames[providerId] ||

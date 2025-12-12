@@ -28,7 +28,14 @@ export default defineEventHandler(async (event) => {
   for (const [key, value] of Object.entries(body)) {
     if (key in defaultSettings) {
       // Convert value to string for storage
-      const stringValue = typeof value === 'number' ? String(value) : value;
+      let stringValue: string;
+      if (typeof value === 'number') {
+        stringValue = String(value);
+      } else if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+        stringValue = JSON.stringify(value);
+      } else {
+        stringValue = value as string;
+      }
       upsertStmt.run(key, stringValue);
     }
   }
@@ -46,6 +53,18 @@ export default defineEventHandler(async (event) => {
       const defaultValue = defaultSettings[recordKey];
       if (typeof defaultValue === 'number') {
         settings[recordKey] = parseFloat(record.value) as never;
+      } else if (Array.isArray(defaultValue)) {
+        try {
+          settings[recordKey] = JSON.parse(record.value) as never;
+        } catch {
+          settings[recordKey] = defaultValue as never;
+        }
+      } else if (typeof defaultValue === 'object' && defaultValue !== null) {
+        try {
+          settings[recordKey] = JSON.parse(record.value) as never;
+        } catch {
+          settings[recordKey] = defaultValue as never;
+        }
       } else {
         settings[recordKey] = record.value as never;
       }

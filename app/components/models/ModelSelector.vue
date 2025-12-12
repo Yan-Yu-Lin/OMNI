@@ -47,8 +47,45 @@
         </div>
 
         <div class="dropdown-list">
+          <!-- Pinned section -->
+          <template v-if="pinnedModelsList.length > 0">
+            <div class="section-header">Pinned</div>
+            <div
+              v-for="model in pinnedModelsList"
+              :key="model.id"
+              class="dropdown-item"
+              :class="{ selected: model.id === modelValue }"
+              @click="selectModel(model.id)"
+            >
+              <div class="item-main">
+                <span class="item-name">{{ model.name }}</span>
+                <span class="item-id">{{ model.id }}</span>
+              </div>
+              <div class="item-actions">
+                <button
+                  class="pin-btn pinned"
+                  @click="handlePinToggle($event, model.id)"
+                  title="Unpin model"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M16 9V4l1 0c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/>
+                  </svg>
+                </button>
+                <div class="item-badges">
+                  <span v-if="model.capabilities.supportsTools" class="mini-badge tools">T</span>
+                  <span v-if="model.capabilities.supportsVision" class="mini-badge vision">V</span>
+                  <span v-if="model.pricing.isFree" class="mini-badge free">F</span>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- All models section -->
+          <div v-if="pinnedModelsList.length > 0 && unpinnedModelsList.length > 0" class="section-header">
+            All Models
+          </div>
           <div
-            v-for="model in filteredModels"
+            v-for="model in unpinnedModelsList"
             :key="model.id"
             class="dropdown-item"
             :class="{ selected: model.id === modelValue }"
@@ -58,10 +95,21 @@
               <span class="item-name">{{ model.name }}</span>
               <span class="item-id">{{ model.id }}</span>
             </div>
-            <div class="item-badges">
-              <span v-if="model.capabilities.supportsTools" class="mini-badge tools">T</span>
-              <span v-if="model.capabilities.supportsVision" class="mini-badge vision">V</span>
-              <span v-if="model.pricing.isFree" class="mini-badge free">F</span>
+            <div class="item-actions">
+              <button
+                class="pin-btn"
+                @click="handlePinToggle($event, model.id)"
+                title="Pin model"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M16 9V4l1 0c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/>
+                </svg>
+              </button>
+              <div class="item-badges">
+                <span v-if="model.capabilities.supportsTools" class="mini-badge tools">T</span>
+                <span v-if="model.capabilities.supportsVision" class="mini-badge vision">V</span>
+                <span v-if="model.pricing.isFree" class="mini-badge free">F</span>
+              </div>
             </div>
           </div>
 
@@ -92,6 +140,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: string];
   'modelSelected': [modelId: string, modelName: string];
 }>();
+
+const { pinnedModels, isPinned, togglePin } = usePinnedModels();
 
 const selectorRef = ref<HTMLElement>();
 const searchInputRef = ref<HTMLInputElement>();
@@ -128,6 +178,21 @@ const filteredModels = computed(() => {
   // Limit to 50 for performance
   return result.slice(0, 50);
 });
+
+// Split filtered models into pinned and unpinned
+const pinnedModelsList = computed(() =>
+  filteredModels.value.filter(m => isPinned(m.id))
+);
+
+const unpinnedModelsList = computed(() =>
+  filteredModels.value.filter(m => !isPinned(m.id))
+);
+
+// Handle pin toggle without closing dropdown
+function handlePinToggle(event: Event, modelId: string) {
+  event.stopPropagation();
+  togglePin(modelId);
+}
 
 function toggleOpen() {
   isOpen.value = !isOpen.value;
@@ -320,9 +385,59 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .item-badges {
   display: flex;
   gap: 4px;
+}
+
+.section-header {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.pin-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #999;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.dropdown-item:hover .pin-btn {
+  opacity: 1;
+}
+
+.pin-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.pin-btn.pinned {
+  opacity: 1;
+  color: #1565c0;
+}
+
+.pin-btn.pinned:hover {
+  color: #c62828;
 }
 
 .mini-badge {

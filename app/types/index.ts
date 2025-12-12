@@ -43,6 +43,7 @@ export interface Settings {
   firecrawlSelfHostedUrl: string;
   firecrawlApiKey: string;
   providerPreferences?: ProviderPreferences;
+  pinnedModels: string[];
 }
 
 export const defaultSettings: Settings = {
@@ -53,6 +54,7 @@ export const defaultSettings: Settings = {
   firecrawlMode: 'self-hosted',
   firecrawlSelfHostedUrl: 'http://localhost:3002',
   firecrawlApiKey: '',
+  pinnedModels: [],
 };
 
 // Chat request type
