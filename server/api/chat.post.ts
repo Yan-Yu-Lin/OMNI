@@ -6,7 +6,7 @@ import {
   stepCountIs,
 } from 'ai';
 import { getOpenRouterClient } from '../utils/openrouter';
-import { tools } from '../tools';
+import { createAllTools } from '../tools';
 import {
   saveUserMessage,
   saveAssistantMessages,
@@ -34,22 +34,35 @@ interface ChatRequestBody {
   providerPreferences?: ProviderPreferences;
 }
 
-const SYSTEM_PROMPT = `You are a helpful assistant with access to web tools.
+const SYSTEM_PROMPT = `You are a helpful assistant with access to web tools and a sandbox environment.
 
-Available tools:
+## Web Tools (for research and information gathering)
 - web_search: Search the web for current information. Returns results with full page content.
 - scrape_url: Extract content from a specific URL. Use when you know the exact page.
-- crawl_site: Crawl a website recursively to get content from multiple pages. Use for understanding a whole site or documentation.
+- crawl_site: Crawl a website recursively to get content from multiple pages.
 - map_site: Discover all URLs on a website without scraping. Fast way to see site structure.
 
-When to use tools:
-- Use web_search for general questions needing current information
-- Use scrape_url when given a specific URL to read
-- Use crawl_site to explore documentation sites, blogs, or sections of a website
-- Use map_site first if you need to find specific pages on a large site before crawling
-- You can use multiple tools in sequence (e.g., map first to find pages, then crawl specific sections)
+## Sandbox Tools (for code execution)
+- sandbox_bash: Execute bash commands in an isolated Linux container.
+  The container has Python 3, Node.js, git, curl, wget, and build tools.
+  Use for running code, installing packages, compiling, or any shell command.
+  Network access is available (pip install, npm install, curl work).
 
-Always summarize the information you find in a helpful way for the user.`;
+- sandbox_read: Read file contents from the sandbox container.
+  Use to check file contents, verify output, or read generated files.
+
+- sandbox_write: Write or create files in the sandbox container.
+  Use to create scripts, config files, or any text file.
+  Parent directories are created automatically.
+
+Files in /workspace persist across messages in this conversation.
+
+## When to use which tools:
+- Use web tools for research, finding documentation, or current information
+- Use sandbox tools when the user wants you to write/run code, create files, or execute commands
+- You can combine both: search for documentation, then implement code in the sandbox
+
+Always explain what you're doing and show relevant output to the user.`;
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<ChatRequestBody>(event);
@@ -112,7 +125,10 @@ export default defineEventHandler(async (event) => {
     },
   } : undefined;
 
-  // 3. Start AI streaming
+  // 3. Create tools for this conversation (sandbox tools need conversationId)
+  const tools = createAllTools(conversationId);
+
+  // 4. Start AI streaming
   const result = streamText({
     model: openrouter(selectedModel, providerOptions),
     system: SYSTEM_PROMPT,
@@ -136,7 +152,7 @@ export default defineEventHandler(async (event) => {
     },
   });
 
-  // 4. Return the SDK's streaming response with server-side consumption
+  // 5. Return the SDK's streaming response with server-side consumption
   // This "tees" the stream: one copy goes to browser, one is consumed server-side
   return result.toUIMessageStreamResponse({
     // Original messages for proper message ID handling

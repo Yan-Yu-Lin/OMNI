@@ -53,6 +53,30 @@ Four Firecrawl-powered tools defined in `server/tools/`:
 - `crawl_site` - Recursive crawling
 - `map_site` - URL discovery
 
+### Docker Sandbox Tools
+
+Three sandbox tools for code execution in isolated containers:
+- `sandbox_bash` - Execute bash commands
+- `sandbox_read` - Read files from container
+- `sandbox_write` - Write files to container
+
+**Setup:**
+```bash
+# Build the sandbox Docker image (required once)
+./docker/build.sh
+```
+
+**Files:**
+- `docker/Dockerfile.sandbox` - Ubuntu 24.04 with Python, Node.js, git, build tools
+- `server/utils/docker.ts` - DockerSandbox class for container management
+- `server/tools/sandbox-*.ts` - Tool implementations
+
+**Workspace persistence:**
+- Files stored at `./data/sandboxes/{conversationId}/`
+- Mounted to container at `/workspace`
+- Persists across messages in same conversation
+- User can access files directly on host
+
 Tools are registered in `server/tools/index.ts` and described in the system prompt in `server/api/chat.post.ts`.
 
 ## Key Files
@@ -65,6 +89,8 @@ Tools are registered in `server/tools/index.ts` and described in the system prom
 | Database setup | `server/db/index.ts` |
 | Type definitions | `app/types/index.ts` |
 | Tool implementations | `server/tools/*.ts` |
+| Docker sandbox utility | `server/utils/docker.ts` |
+| Sandbox Dockerfile | `docker/Dockerfile.sandbox` |
 
 ## Common Modifications
 

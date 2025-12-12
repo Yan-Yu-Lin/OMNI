@@ -124,6 +124,73 @@ export interface MapSiteOutput {
   urls: string[];
 }
 
+// =============================================================================
+// SANDBOX TOOL TYPES
+// =============================================================================
+
+/**
+ * Sandbox Bash tool - Execute bash commands in isolated container
+ */
+export interface SandboxBashInput {
+  /** Bash command to execute */
+  command: string;
+  /** Timeout in milliseconds (default 30000, max 300000) */
+  timeout?: number;
+  /** Working directory (default /workspace) */
+  workdir?: string;
+}
+
+export interface SandboxBashOutput {
+  /** Standard output from command */
+  stdout: string;
+  /** Standard error from command */
+  stderr: string;
+  /** Exit code (0 = success) */
+  exitCode: number;
+  /** Execution time in milliseconds */
+  executionTime: number;
+}
+
+/**
+ * Sandbox Read tool - Read file contents from container
+ */
+export interface SandboxReadInput {
+  /** Path to file (absolute or relative to /workspace) */
+  path: string;
+}
+
+export interface SandboxReadOutput {
+  /** File content as string */
+  content: string;
+  /** File size in bytes */
+  size: number;
+  /** Resolved absolute path */
+  path: string;
+}
+
+/**
+ * Sandbox Write tool - Write file to container
+ */
+export interface SandboxWriteInput {
+  /** Path where file should be written */
+  path: string;
+  /** Content to write */
+  content: string;
+}
+
+export interface SandboxWriteOutput {
+  /** Whether write was successful */
+  success: boolean;
+  /** Resolved absolute path */
+  path: string;
+  /** Bytes written */
+  size: number;
+}
+
+// =============================================================================
+// TOOL STATE TYPES
+// =============================================================================
+
 // Tool state type
 export type ToolState =
   | 'input-streaming'

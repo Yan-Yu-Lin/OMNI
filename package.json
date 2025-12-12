@@ -15,6 +15,7 @@
     "@openrouter/sdk": "^0.2.9",
     "ai": "6.0.0-beta.137",
     "better-sqlite3": "^12.5.0",
+    "dockerode": "^4.0.9",
     "dompurify": "^3.3.0",
     "marked": "^17.0.1",
     "nanoid": "^5.1.6",
@@ -25,6 +26,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/dockerode": "^3.3.47"
   }
 }

@@ -25,6 +25,12 @@ export default defineNuxtConfig({
     firecrawlApiKey: '',
     firecrawlSelfHostedUrl: 'http://localhost:3002',
 
+    // Docker sandbox configuration
+    dockerSandboxImage: 'ai-sandbox:latest',
+    dockerSandboxTimeout: 30000, // Default command timeout (30s)
+    dockerSandboxMaxOutput: 102400, // Max output size (100KB)
+    dockerSandboxWorkspacePath: './data/sandboxes', // Where volumes are stored
+
     // Public (exposed to client)
     public: {
       appName: 'AI Chat',
@@ -32,9 +38,9 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    // Tell Nitro not to bundle better-sqlite3 (it's a native module)
+    // Tell Nitro not to bundle native modules
     externals: {
-      external: ['better-sqlite3'],
+      external: ['better-sqlite3', 'dockerode'],
     },
   },
 });
