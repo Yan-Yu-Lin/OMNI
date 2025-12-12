@@ -131,7 +131,7 @@
             <button
               v-if="modelValue && providerPreferences"
               class="provider-config-btn"
-              @click="currentView = 'providers'"
+              @click.stop="switchToProvidersView"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="3"></circle>
@@ -145,7 +145,7 @@
         <!-- Provider selection view -->
         <template v-else-if="currentView === 'providers'">
           <div class="dropdown-header provider-header">
-            <button class="back-btn" @click="currentView = 'models'">
+            <button class="back-btn" @click.stop="currentView = 'models'">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="15 18 9 12 15 6"></polyline>
               </svg>
@@ -166,7 +166,7 @@
               <div
                 class="provider-option"
                 :class="{ selected: localProviderMode === 'auto' }"
-                @click="selectAutoMode"
+                @click.stop="selectAutoMode"
               >
                 <div class="option-radio">
                   <div class="radio-outer">
@@ -198,7 +198,7 @@
                 :key="provider.slug"
                 class="provider-option"
                 :class="{ selected: localProviderMode === 'specific' && localProviderSlug === provider.slug }"
-                @click="selectSpecificProvider(provider.slug)"
+                @click.stop="selectSpecificProvider(provider.slug)"
               >
                 <div class="option-radio">
                   <div class="radio-outer">
@@ -403,6 +403,11 @@ watch(currentView, async (view) => {
     await loadProviders();
   }
 });
+
+// Switch to providers view
+function switchToProvidersView() {
+  currentView.value = 'providers';
+}
 
 function selectAutoMode() {
   localProviderMode.value = 'auto';
