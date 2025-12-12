@@ -22,7 +22,11 @@ import { defaultSettings, type ProviderPreferences } from '~/types';
  * Uses a transaction to atomically check and create.
  * Returns true if a new conversation was created, false if it already existed.
  */
-function ensureConversationExists(conversationId: string, model?: string): boolean {
+function ensureConversationExists(
+  conversationId: string,
+  model?: string,
+  providerPreferences?: ProviderPreferences
+): boolean {
   const existingConv = db.prepare('SELECT id FROM conversations WHERE id = ?').get(conversationId);
 
   if (existingConv) {
@@ -31,9 +35,15 @@ function ensureConversationExists(conversationId: string, model?: string): boole
 
   // Create the conversation with the provided ID
   db.prepare(`
-    INSERT INTO conversations (id, title, model, status)
-    VALUES (?, ?, ?, ?)
-  `).run(conversationId, 'New Conversation', model || defaultSettings.model, 'idle');
+    INSERT INTO conversations (id, title, model, provider_preferences, status)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    conversationId,
+    'New Conversation',
+    model || defaultSettings.model,
+    providerPreferences ? JSON.stringify(providerPreferences) : null,
+    'idle'
+  );
 
   return true;
 }
@@ -120,7 +130,7 @@ export default defineEventHandler(async (event) => {
   const selectedModel = model || getDefaultModel();
 
   // 1. Ensure conversation exists (creates if needed for lazy creation)
-  const isNewConversation = ensureConversationExists(conversationId, selectedModel);
+  const isNewConversation = ensureConversationExists(conversationId, selectedModel, providerPreferences);
   console.log('[Chat API] Conversation exists:', !isNewConversation, 'isNew:', isNewConversation);
 
   // 2. Save the user message to DB

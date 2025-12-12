@@ -56,6 +56,7 @@ export const defaultSettings: Settings = {
   firecrawlSelfHostedUrl: 'http://localhost:3002',
   firecrawlApiKey: '',
   pinnedModels: [],
+  providerPreferences: { mode: 'auto', sort: 'throughput' },
 };
 
 // Chat request type
