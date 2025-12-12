@@ -17,61 +17,70 @@
       </div>
     </div>
 
-    <!-- Input section at bottom -->
-    <div class="input-section">
-      <div class="input-row">
-        <ModelsModelSelector
-          v-model="selectedModelId"
-          :models="models"
-          class="home-model-selector"
+    <!-- Unified input section at bottom -->
+    <div class="unified-input-section">
+      <form class="unified-input-container" @submit.prevent="handleSubmit">
+        <textarea
+          ref="textareaRef"
+          v-model="inputText"
+          placeholder="Message AI..."
+          rows="1"
+          @keydown="handleKeydown"
+          @compositionstart="isComposing = true"
+          @compositionend="isComposing = false"
         />
-      </div>
-      <form class="chat-input" @submit.prevent="handleSubmit">
-        <div class="input-wrapper">
-          <textarea
-            ref="textareaRef"
-            v-model="inputText"
-            placeholder="Message AI..."
-            rows="1"
-            @keydown="handleKeydown"
-            @compositionstart="isComposing = true"
-            @compositionend="isComposing = false"
-          />
-          <button
-            type="submit"
-            class="send-btn"
-            :disabled="!inputText.trim()"
-            :class="{ active: inputText.trim() }"
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+
+        <div class="input-toolbar">
+          <div class="toolbar-left">
+            <ModelsModelSelector
+              v-if="models.length > 0"
+              :model-value="selectedModelId"
+              :models="models"
+              :provider-preferences="providerPreferences"
+              @update:model-value="selectedModelId = $event"
+              @update:provider-preferences="providerPreferences = $event"
+            />
+          </div>
+
+          <div class="toolbar-right">
+            <button
+              type="submit"
+              class="send-btn"
+              :disabled="!inputText.trim()"
+              :class="{ active: inputText.trim() }"
             >
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <p class="input-hint">
-          Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line
-        </p>
       </form>
+
+      <p class="input-hint">
+        Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line
+      </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { nanoid } from 'nanoid';
+import type { ProviderPreferences } from '~/types';
 
 const router = useRouter();
 const { setPendingMessage } = useConversations();
-const { settings, fetchSettings } = useSettings();
+const { settings, fetchSettings, updateSettings } = useSettings();
 const { models, fetchModels } = useModels();
 
 // Local state
@@ -82,12 +91,36 @@ const isComposing = ref(false);
 // Model selection - defaults to settings
 const selectedModelId = ref(settings.value.model);
 
+// Provider preferences - defaults to settings
+const providerPreferences = ref<ProviderPreferences>(
+  settings.value.providerPreferences || { mode: 'auto', sort: 'throughput' }
+);
+
 // Sync with settings once loaded
 watch(() => settings.value.model, (newModel) => {
   if (newModel && !selectedModelId.value) {
     selectedModelId.value = newModel;
   }
 });
+
+watch(() => settings.value.providerPreferences, (newPrefs) => {
+  if (newPrefs) {
+    providerPreferences.value = newPrefs;
+  }
+}, { deep: true });
+
+// Save model and provider preferences when changed
+watch(selectedModelId, async (newModel, oldModel) => {
+  if (oldModel && newModel !== oldModel) {
+    await updateSettings({ model: newModel });
+  }
+});
+
+watch(providerPreferences, async (newPrefs, oldPrefs) => {
+  if (oldPrefs && JSON.stringify(newPrefs) !== JSON.stringify(oldPrefs)) {
+    await updateSettings({ providerPreferences: newPrefs });
+  }
+}, { deep: true });
 
 // Suggestion prompts
 const suggestions = [
@@ -197,44 +230,35 @@ onMounted(() => {
   border-color: #ccc;
 }
 
-.input-section {
+/* Unified input section - matches ChatContainer */
+.unified-input-section {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
   padding: 16px 24px 12px;
   background: linear-gradient(to top, #fafafa 0%, #fff 100%);
   border-top: 1px solid #eaeaea;
 }
 
-.input-row {
+.unified-input-container {
   display: flex;
-  justify-content: center;
-  margin-bottom: 12px;
-}
-
-.home-model-selector {
-  /* Center the model selector */
-}
-
-.chat-input {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
   background: #fff;
   border: 1px solid #e0e0e0;
   border-radius: 16px;
-  padding: 12px 16px;
+  overflow: hidden;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.input-wrapper:focus-within {
+.unified-input-container:focus-within {
   border-color: #171717;
   box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.06);
 }
 
-textarea {
+.unified-input-container textarea {
   flex: 1;
   border: none;
   background: transparent;
@@ -246,24 +270,45 @@ textarea {
   min-height: 24px;
   max-height: 200px;
   overflow-y: auto;
+  padding: 14px 16px 0;
 }
 
-textarea::placeholder {
+.unified-input-container textarea::placeholder {
   color: #a0a0a0;
 }
 
-textarea:focus {
+.unified-input-container textarea:focus {
   outline: none;
+}
+
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 10px;
+  min-height: 44px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .send-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #e0e0e0;
   color: #a0a0a0;
   cursor: not-allowed;

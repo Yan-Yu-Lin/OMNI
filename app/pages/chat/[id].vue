@@ -3,29 +3,18 @@
     Loading conversation...
   </div>
 
-  <template v-else>
-    <ChatContainer
-      :messages="chatMessages"
-      :is-streaming="isStreaming"
-      :models="models"
-      :selected-model="selectedModelId"
-      :show-provider-button="!!selectedModelId"
-      :provider-display-text="providerDisplayText"
-      @send="handleSend"
-      @update:selected-model="selectedModelId = $event"
-      @model-selected="handleModelSelected"
-      @provider-click="showProviderPanel = true"
-    />
-
-    <!-- Provider selection panel -->
-    <ModelsProviderPanel
-      :open="showProviderPanel"
-      :model-id="selectedModelId"
-      :model-name="selectedModelName"
-      v-model="providerPreferences"
-      @close="handleProviderPanelClose"
-    />
-  </template>
+  <ChatContainer
+    v-else
+    :messages="chatMessages"
+    :is-streaming="isStreaming"
+    :models="models"
+    :selected-model="selectedModelId"
+    :provider-preferences="providerPreferences"
+    @send="handleSend"
+    @update:selected-model="selectedModelId = $event"
+    @update:provider-preferences="providerPreferences = $event"
+    @model-selected="handleModelSelected"
+  />
 </template>
 
 <script setup lang="ts">
@@ -47,7 +36,7 @@ const { models, fetchModels } = useModels();
 const { settings, fetchSettings, updateSettings } = useSettings();
 
 // Providers composable
-const { shouldAutoOpenPanel, markModelSeen } = useProviders();
+const { markModelSeen } = useProviders();
 
 // Selected model - initialized from settings (will be updated when conversation loads)
 const selectedModelId = ref(settings.value.model);
@@ -60,20 +49,6 @@ const selectedModelName = computed(() => {
 const providerPreferences = ref<ProviderPreferences>({
   mode: 'auto',
   sort: 'throughput',
-});
-const showProviderPanel = ref(false);
-
-// Display text for provider button
-const providerDisplayText = computed(() => {
-  if (providerPreferences.value.mode === 'auto') {
-    const sortLabels: Record<string, string> = {
-      throughput: 'Auto',
-      latency: 'Fastest',
-      price: 'Cheapest',
-    };
-    return sortLabels[providerPreferences.value.sort || 'throughput'] || 'Auto';
-  }
-  return providerPreferences.value.provider || 'Custom';
 });
 
 // Chat state
@@ -160,17 +135,8 @@ const initializeChat = (initialMessages: UIMessage[]) => {
 
 // Handle model selection from ModelSelector
 const handleModelSelected = (modelId: string, modelName: string) => {
-  // Check if we should auto-open the provider panel
-  if (shouldAutoOpenPanel(modelId)) {
-    showProviderPanel.value = true;
-  }
-};
-
-// Handle provider panel close
-const handleProviderPanelClose = () => {
-  showProviderPanel.value = false;
-  // Mark the model as seen so we don't auto-open again
-  markModelSeen(selectedModelId.value);
+  // Mark model as seen (for provider auto-open behavior)
+  markModelSeen(modelId);
 };
 
 // Load conversation from server

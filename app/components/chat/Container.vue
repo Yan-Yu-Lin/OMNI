@@ -1,61 +1,93 @@
 <template>
   <div class="chat-container">
     <ChatMessageList :messages="messages" :is-streaming="isStreaming" />
-    <div class="input-section">
-      <div v-if="models.length > 0" class="model-row">
-        <ModelsModelSelector
-          :model-value="selectedModel"
-          :models="models"
-          @update:model-value="handleModelChange"
-          @model-selected="handleModelSelected"
+
+    <!-- Unified input container -->
+    <div class="unified-input-section">
+      <form class="unified-input-container" @submit.prevent="handleSubmit">
+        <textarea
+          ref="textareaRef"
+          v-model="inputText"
+          :placeholder="inputPlaceholder"
+          rows="1"
+          :disabled="isStreaming"
+          @keydown="handleKeydown"
+          @compositionstart="isComposing = true"
+          @compositionend="isComposing = false"
         />
-        <button
-          v-if="selectedModel && showProviderButton"
-          class="provider-toggle"
-          @click="emit('provider-click')"
-          :title="providerDisplayText"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-          <span class="provider-label">{{ providerDisplayText }}</span>
-        </button>
-      </div>
-      <ChatInput
-        :disabled="isStreaming"
-        :placeholder="inputPlaceholder"
-        @submit="handleSubmit"
-      />
+
+        <div class="input-toolbar">
+          <div class="toolbar-left">
+            <ModelsModelSelector
+              v-if="models.length > 0"
+              :model-value="selectedModel"
+              :models="models"
+              :provider-preferences="providerPreferences"
+              @update:model-value="handleModelChange"
+              @update:provider-preferences="handleProviderChange"
+              @model-selected="handleModelSelected"
+            />
+          </div>
+
+          <div class="toolbar-right">
+            <button
+              type="submit"
+              class="send-btn"
+              :disabled="!inputText.trim() || isStreaming"
+              :class="{ active: inputText.trim() && !isStreaming }"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <p class="input-hint">
+        Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line
+      </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { UIMessage } from 'ai';
-import type { Model } from '~/types';
+import type { Model, ProviderPreferences } from '~/types';
 
 const props = withDefaults(defineProps<{
   messages: UIMessage[];
   isStreaming?: boolean;
   models?: Model[];
   selectedModel?: string;
-  showProviderButton?: boolean;
-  providerDisplayText?: string;
+  providerPreferences?: ProviderPreferences;
 }>(), {
   isStreaming: false,
   models: () => [],
   selectedModel: '',
-  showProviderButton: false,
-  providerDisplayText: 'Auto',
 });
 
 const emit = defineEmits<{
   send: [text: string];
   'update:selectedModel': [modelId: string];
+  'update:providerPreferences': [prefs: ProviderPreferences];
   'model-selected': [modelId: string, modelName: string];
-  'provider-click': [];
 }>();
+
+// Input state
+const inputText = ref('');
+const textareaRef = ref<HTMLTextAreaElement>();
+const isComposing = ref(false);
 
 const inputPlaceholder = computed(() => {
   if (props.isStreaming) {
@@ -64,12 +96,47 @@ const inputPlaceholder = computed(() => {
   return 'Send a message...';
 });
 
-const handleSubmit = (text: string) => {
-  emit('send', text);
+const handleSubmit = () => {
+  const text = inputText.value.trim();
+  if (text && !props.isStreaming) {
+    emit('send', text);
+    inputText.value = '';
+    // Reset height
+    if (textareaRef.value) {
+      textareaRef.value.style.height = 'auto';
+    }
+  }
 };
+
+const handleKeydown = (e: KeyboardEvent) => {
+  // Submit on Enter (without Shift), but not during IME composition
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isComposing.value) {
+    e.preventDefault();
+    handleSubmit();
+  }
+};
+
+// Auto-resize textarea
+watch(inputText, async () => {
+  await nextTick();
+  if (textareaRef.value) {
+    textareaRef.value.style.height = 'auto';
+    textareaRef.value.style.height =
+      Math.min(textareaRef.value.scrollHeight, 200) + 'px';
+  }
+});
+
+// Focus on mount
+onMounted(() => {
+  textareaRef.value?.focus();
+});
 
 const handleModelChange = (modelId: string) => {
   emit('update:selectedModel', modelId);
+};
+
+const handleProviderChange = (prefs: ProviderPreferences) => {
+  emit('update:providerPreferences', prefs);
 };
 
 const handleModelSelected = (modelId: string, modelName: string) => {
@@ -85,44 +152,126 @@ const handleModelSelected = (modelId: string, modelName: string) => {
   background: #fff;
 }
 
-.input-section {
+.unified-input-section {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  padding: 16px 24px 12px;
+  background: linear-gradient(to top, #fafafa 0%, #fff 100%);
+  border-top: 1px solid #eaeaea;
 }
 
-.model-row {
+.unified-input-container {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.unified-input-container:focus-within {
+  border-color: #171717;
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.06);
+}
+
+.unified-input-container textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  resize: none;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #171717;
+  min-height: 24px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 14px 16px 0;
+}
+
+.unified-input-container textarea::placeholder {
+  color: #a0a0a0;
+}
+
+.unified-input-container textarea:focus {
+  outline: none;
+}
+
+.unified-input-container textarea:disabled {
+  color: #a0a0a0;
+  cursor: not-allowed;
+}
+
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 10px;
+  min-height: 44px;
+}
+
+.toolbar-left {
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px 0;
-  background: linear-gradient(to top, #fafafa 0%, #fff 100%);
 }
 
-.provider-toggle {
+.toolbar-right {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: #f5f5f5;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  gap: 8px;
+}
+
+.send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: #e0e0e0;
+  color: #a0a0a0;
+  cursor: not-allowed;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.send-btn.active {
+  background: #171717;
+  color: #fff;
   cursor: pointer;
-  font-size: 12px;
-  color: #666;
-  transition: all 0.1s;
 }
 
-.provider-toggle:hover {
-  background: #eee;
-  color: #333;
+.send-btn.active:hover {
+  background: #333;
+  transform: scale(1.05);
 }
 
-.provider-label {
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.send-btn.active:active {
+  transform: scale(0.98);
+}
+
+.input-hint {
+  font-size: 11px;
+  color: #a0a0a0;
+  margin-top: 8px;
+  text-align: center;
+}
+
+.input-hint kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 10px;
+  background: #f0f0f0;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin: 0 2px;
 }
 </style>
