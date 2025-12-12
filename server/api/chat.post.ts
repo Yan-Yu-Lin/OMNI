@@ -15,7 +15,7 @@ import {
   autoGenerateTitle,
 } from '../utils/chat-persistence';
 import db from '../db';
-import { defaultSettings } from '~/types';
+import { defaultSettings, type ProviderPreferences } from '~/types';
 
 // Get default model from settings table, fallback to defaultSettings
 function getDefaultModel(): string {
@@ -31,6 +31,7 @@ interface ChatRequestBody {
   messages: UIMessage[];
   conversationId: string;
   model?: string;
+  providerPreferences?: ProviderPreferences;
 }
 
 const SYSTEM_PROMPT = `You are a helpful assistant with access to web tools.
@@ -52,7 +53,7 @@ Always summarize the information you find in a helpful way for the user.`;
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<ChatRequestBody>(event);
-  const { messages, conversationId, model } = body;
+  const { messages, conversationId, model, providerPreferences } = body;
 
   // Debug: Log what we received
   console.log('[Chat API] Received request for conversation:', conversationId);
@@ -97,9 +98,23 @@ export default defineEventHandler(async (event) => {
   // Use provided model, or read default from settings
   const selectedModel = model || getDefaultModel();
 
+  // Build provider options from preferences
+  const providerOptions = providerPreferences ? {
+    provider: {
+      // If specific provider selected, put it first in order
+      order: providerPreferences.mode === 'specific' && providerPreferences.provider
+        ? [providerPreferences.provider]
+        : undefined,
+      // Sort strategy for auto mode
+      sort: providerPreferences.mode === 'auto' ? providerPreferences.sort : undefined,
+      // Allow fallbacks in auto mode
+      allow_fallbacks: providerPreferences.mode === 'auto',
+    },
+  } : undefined;
+
   // 3. Start AI streaming
   const result = streamText({
-    model: openrouter(selectedModel),
+    model: openrouter(selectedModel, providerOptions),
     system: SYSTEM_PROMPT,
     messages: convertToModelMessages(messages),
     tools,

@@ -80,4 +80,16 @@ try {
   // Table might already exist, that's fine
 }
 
+// Migration: Add provider_preferences column to conversations table
+try {
+  const tableInfo = db.prepare('PRAGMA table_info(conversations)').all() as { name: string }[];
+  const hasProviderPreferences = tableInfo.some(col => col.name === 'provider_preferences');
+  if (!hasProviderPreferences) {
+    db.exec('ALTER TABLE conversations ADD COLUMN provider_preferences TEXT');
+    console.log('[DB Migration] Added provider_preferences column to conversations table');
+  }
+} catch (e) {
+  console.error('[DB Migration] Error checking/adding provider_preferences column:', e);
+}
+
 export default db;

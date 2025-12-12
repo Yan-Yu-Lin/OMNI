@@ -9,7 +9,20 @@
       <ModelsModelSelector
         v-model="selectedModelId"
         :models="models"
+        @model-selected="handleModelSelected"
       />
+      <button
+        v-if="selectedModelId"
+        class="provider-toggle"
+        @click="showProviderPanel = true"
+        :title="providerDisplayText"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        <span class="provider-label">{{ providerDisplayText }}</span>
+      </button>
     </header>
 
     <ChatContainer
@@ -17,13 +30,22 @@
       :is-streaming="isStreaming"
       @send="handleSend"
     />
+
+    <!-- Provider selection panel -->
+    <ModelsProviderPanel
+      :open="showProviderPanel"
+      :model-id="selectedModelId"
+      :model-name="selectedModelName"
+      v-model="providerPreferences"
+      @close="handleProviderPanelClose"
+    />
   </template>
 </template>
 
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import type { ConversationStatus } from '~/types';
+import type { ConversationStatus, ProviderPreferences } from '~/types';
 
 const route = useRoute();
 const router = useRouter();
@@ -38,8 +60,35 @@ const { models, fetchModels } = useModels();
 // Settings composable for default model
 const { settings, fetchSettings, updateSettings } = useSettings();
 
+// Providers composable
+const { shouldAutoOpenPanel, markModelSeen } = useProviders();
+
 // Selected model - initialized from settings (will be updated when conversation loads)
 const selectedModelId = ref(settings.value.model);
+const selectedModelName = computed(() => {
+  const model = models.value.find(m => m.id === selectedModelId.value);
+  return model?.name || selectedModelId.value;
+});
+
+// Provider preferences state
+const providerPreferences = ref<ProviderPreferences>({
+  mode: 'auto',
+  sort: 'throughput',
+});
+const showProviderPanel = ref(false);
+
+// Display text for provider button
+const providerDisplayText = computed(() => {
+  if (providerPreferences.value.mode === 'auto') {
+    const sortLabels: Record<string, string> = {
+      throughput: 'Auto',
+      latency: 'Fastest',
+      price: 'Cheapest',
+    };
+    return sortLabels[providerPreferences.value.sort || 'throughput'] || 'Auto';
+  }
+  return providerPreferences.value.provider || 'Custom';
+});
 
 // Chat state
 const loadingChat = ref(true);
@@ -73,12 +122,13 @@ const initializeChat = (initialMessages: UIMessage[]) => {
     chat.value.stop();
   }
 
-  // Create transport with conversationId and model in the body
+  // Create transport with conversationId, model, and provider preferences in the body
   const transport = new DefaultChatTransport({
     api: '/api/chat',
     body: () => ({
       conversationId: conversationId.value,
       model: selectedModelId.value,
+      providerPreferences: providerPreferences.value,
     }),
   });
 
@@ -116,6 +166,21 @@ const initializeChat = (initialMessages: UIMessage[]) => {
   }, { immediate: true });
 };
 
+// Handle model selection from ModelSelector
+const handleModelSelected = (modelId: string, modelName: string) => {
+  // Check if we should auto-open the provider panel
+  if (shouldAutoOpenPanel(modelId)) {
+    showProviderPanel.value = true;
+  }
+};
+
+// Handle provider panel close
+const handleProviderPanelClose = () => {
+  showProviderPanel.value = false;
+  // Mark the model as seen so we don't auto-open again
+  markModelSeen(selectedModelId.value);
+};
+
 // Load conversation from server
 const loadConversation = async () => {
   loadingChat.value = true;
@@ -130,6 +195,13 @@ const loadConversation = async () => {
       selectedModelId.value = conv.model;
     } else {
       selectedModelId.value = settings.value.model;
+    }
+
+    // Load provider preferences from conversation or settings
+    if (conv.providerPreferences) {
+      providerPreferences.value = conv.providerPreferences;
+    } else if (settings.value.providerPreferences) {
+      providerPreferences.value = settings.value.providerPreferences;
     }
 
     initializeChat(conv.messages);
@@ -209,6 +281,17 @@ watch(selectedModelId, async (newModel, oldModel) => {
   }
 });
 
+// Watch for provider preference changes and save to both conversation and settings
+watch(providerPreferences, async (newPrefs, oldPrefs) => {
+  // Skip initial value and only save actual changes
+  if (oldPrefs && JSON.stringify(newPrefs) !== JSON.stringify(oldPrefs)) {
+    // Save to conversation
+    await updateConversation(conversationId.value, { providerPreferences: newPrefs });
+    // Save as global default
+    await updateSettings({ providerPreferences: newPrefs });
+  }
+}, { deep: true });
+
 // Load conversation and models on mount
 onMounted(() => {
   fetchSettings();
@@ -246,9 +329,36 @@ watch(conversationId, () => {
 .chat-header {
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid #e0e0e0;
   background: #fff;
   flex-shrink: 0;
+}
+
+.provider-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+  transition: all 0.1s;
+}
+
+.provider-toggle:hover {
+  background: #eee;
+  color: #333;
+}
+
+.provider-label {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

@@ -1,8 +1,10 @@
 import db from '../../db';
+import type { ProviderPreferences } from '~/types';
 
 interface UpdateConversationBody {
   title?: string;
   model?: string;
+  providerPreferences?: ProviderPreferences;
 }
 
 export default defineEventHandler(async (event) => {
@@ -27,6 +29,11 @@ export default defineEventHandler(async (event) => {
   if (body.model !== undefined) {
     updates.push('model = ?');
     values.push(body.model);
+  }
+
+  if (body.providerPreferences !== undefined) {
+    updates.push('provider_preferences = ?');
+    values.push(JSON.stringify(body.providerPreferences));
   }
 
   if (updates.length === 0) {

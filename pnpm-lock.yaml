@@ -14,6 +14,9 @@ importers:
       '@openrouter/ai-sdk-provider':
         specifier: ^1.4.1
         version: 1.4.1(ai@6.0.0-beta.137(zod@4.1.13))(zod@4.1.13)
+      '@openrouter/sdk':
+        specifier: ^0.2.9
+        version: 0.2.9
       ai:
         specifier: 6.0.0-beta.137
         version: 6.0.0-beta.137(zod@4.1.13)
@@ -522,6 +525,9 @@ packages:
 
   '@openrouter/sdk@0.1.27':
     resolution: {integrity: sha512-RH//L10bSmc81q25zAZudiI4kNkLgxF2E+WU42vghp3N6TEvZ6F0jK7uT3tOxkEn91gzmMw9YVmDENy7SJsajQ==}
+
+  '@openrouter/sdk@0.2.9':
+    resolution: {integrity: sha512-O3tu6PwoKzwYXCCT+azFneb0F1T6YcZUqlNVEFABWLOcBzdvsCfgW+GM3QKeBL9V0E1ZBjVy9yssavNjhphO6Q==}
 
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
@@ -4165,6 +4171,10 @@ snapshots:
       zod: 4.1.13
 
   '@openrouter/sdk@0.1.27':
+    dependencies:
+      zod: 4.1.13
+
+  '@openrouter/sdk@0.2.9':
     dependencies:
       zod: 4.1.13
 

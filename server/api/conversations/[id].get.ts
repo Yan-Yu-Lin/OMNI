@@ -12,10 +12,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const conversation = db.prepare(`
-    SELECT id, title, model, status, created_at, updated_at
+    SELECT id, title, model, provider_preferences, status, created_at, updated_at
     FROM conversations
     WHERE id = ?
-  `).get(id) as ConversationRecord | undefined;
+  `).get(id) as (ConversationRecord & { provider_preferences?: string }) | undefined;
 
   if (!conversation) {
     throw createError({
@@ -35,6 +35,9 @@ export default defineEventHandler(async (event) => {
     id: conversation.id,
     title: conversation.title,
     model: conversation.model,
+    providerPreferences: conversation.provider_preferences
+      ? JSON.parse(conversation.provider_preferences)
+      : undefined,
     status: conversation.status,
     createdAt: conversation.created_at,
     updatedAt: conversation.updated_at,

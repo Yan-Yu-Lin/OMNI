@@ -1,6 +1,21 @@
 // Re-export from ai package for convenience
 export type { UIMessage } from 'ai';
 
+// Provider preferences (defined early as it's referenced by Conversation and Settings)
+/**
+ * User's provider routing preferences
+ */
+export interface ProviderPreferences {
+  /** Routing mode: 'auto' for OpenRouter routing, 'specific' for explicit provider */
+  mode: 'auto' | 'specific';
+
+  /** Provider slug when mode='specific' */
+  provider?: string;
+
+  /** Sort strategy when mode='auto': optimize for price, latency, or throughput */
+  sort?: 'price' | 'latency' | 'throughput';
+}
+
 // Conversation types
 export type ConversationStatus = 'idle' | 'streaming' | 'error';
 
@@ -8,6 +23,7 @@ export interface Conversation {
   id: string;
   title: string;
   model: string | null;
+  providerPreferences?: ProviderPreferences;
   status: ConversationStatus;
   createdAt: string;
   updatedAt: string;
@@ -26,6 +42,7 @@ export interface Settings {
   firecrawlMode: 'self-hosted' | 'cloud';
   firecrawlSelfHostedUrl: string;
   firecrawlApiKey: string;
+  providerPreferences?: ProviderPreferences;
 }
 
 export const defaultSettings: Settings = {
@@ -320,4 +337,54 @@ export interface ProviderInfo {
 
   /** Number of models from this provider */
   modelCount: number;
+}
+
+// =============================================================================
+// PROVIDER SELECTION TYPES
+// =============================================================================
+
+/**
+ * A provider/endpoint that can serve a specific model
+ * Data comes from OpenRouter's Endpoints API
+ */
+export interface ModelProvider {
+  /** Provider display name (e.g., "Anthropic", "Amazon Bedrock") */
+  name: string;
+
+  /** Provider slug for API routing */
+  slug: string;
+
+  /** Pricing per million tokens */
+  pricing: {
+    prompt: number;
+    completion: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
+
+  /** Whether this provider supports prompt caching */
+  supportsCaching: boolean;
+
+  /** Uptime percentage in last 30 minutes (0-100) */
+  uptime: number;
+
+  /** Maximum context length at this provider */
+  contextLength: number;
+
+  /** Maximum completion tokens at this provider */
+  maxCompletionTokens?: number;
+}
+
+/**
+ * API response from /api/providers/[model] endpoint
+ */
+export interface ProvidersApiResponse {
+  /** Model ID that was queried */
+  modelId: string;
+
+  /** Available providers for this model */
+  providers: ModelProvider[];
+
+  /** Number of providers available */
+  count: number;
 }

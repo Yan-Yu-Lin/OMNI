@@ -1,4 +1,4 @@
-import type { Conversation, ConversationWithMessages } from '~/types';
+import type { Conversation, ConversationWithMessages, ProviderPreferences } from '~/types';
 import type { UIMessage } from 'ai';
 
 export function useConversations() {
@@ -55,7 +55,11 @@ export function useConversations() {
   };
 
   // Update conversation
-  const updateConversation = async (id: string, data: { title?: string; model?: string }) => {
+  const updateConversation = async (id: string, data: {
+    title?: string;
+    model?: string;
+    providerPreferences?: ProviderPreferences;
+  }) => {
     try {
       await $fetch(`/api/conversations/${id}`, {
         method: 'PUT',
@@ -70,6 +74,9 @@ export function useConversations() {
           id: existing.id,
           title: data.title ?? existing.title,
           model: data.model !== undefined ? data.model : existing.model,
+          providerPreferences: data.providerPreferences !== undefined
+            ? data.providerPreferences
+            : existing.providerPreferences,
           status: existing.status,
           createdAt: existing.createdAt,
           updatedAt: existing.updatedAt,

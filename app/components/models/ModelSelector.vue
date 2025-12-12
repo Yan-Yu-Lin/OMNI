@@ -90,6 +90,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
+  'modelSelected': [modelId: string, modelName: string];
 }>();
 
 const selectorRef = ref<HTMLElement>();
@@ -151,7 +152,9 @@ function updateDropdownPosition() {
 }
 
 function selectModel(modelId: string) {
+  const model = props.models.find(m => m.id === modelId);
   emit('update:modelValue', modelId);
+  emit('modelSelected', modelId, model?.name || modelId);
   isOpen.value = false;
   searchQuery.value = '';
 }

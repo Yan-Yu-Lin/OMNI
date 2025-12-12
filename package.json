@@ -12,6 +12,7 @@
   "dependencies": {
     "@ai-sdk/vue": "3.0.0-beta.137",
     "@openrouter/ai-sdk-provider": "^1.4.1",
+    "@openrouter/sdk": "^0.2.9",
     "ai": "6.0.0-beta.137",
     "better-sqlite3": "^12.5.0",
     "dompurify": "^3.3.0",
