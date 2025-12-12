@@ -37,7 +37,7 @@
               :model-value="selectedModelId"
               :models="models"
               :provider-preferences="providerPreferences"
-              @update:model-value="selectedModelId = $event"
+              @update:model-value="selectedModelId = $event; userHasSelectedModel = true"
               @update:provider-preferences="providerPreferences = $event"
             />
           </div>
@@ -93,8 +93,13 @@ const providerPreferences = ref<ProviderPreferences>(
 );
 
 // Sync model with lastActiveModel once settings are loaded
+// Use immediate: false to avoid running on mount (before settings fetch)
+// Track if user has manually changed the model to avoid overwriting their choice
+const userHasSelectedModel = ref(false);
+
 watch(lastActiveModel, (newModel) => {
-  if (newModel && !selectedModelId.value) {
+  // Only update if settings loaded a different model AND user hasn't manually selected
+  if (newModel && !userHasSelectedModel.value && newModel !== selectedModelId.value) {
     selectedModelId.value = newModel;
     // Also load provider prefs for this model
     providerPreferences.value = getModelProviderPrefs(newModel);

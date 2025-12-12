@@ -15,9 +15,14 @@ export default defineEventHandler(async () => {
   // Start with defaults and merge in stored values
   const settings: Settings = { ...defaultSettings };
 
+  // Define keys that are strings (not in defaults but valid)
+  const stringOnlyKeys = new Set(['lastActiveModel']);
+
   for (const record of records) {
     const key = record.key as keyof Settings;
-    if (key in settings) {
+
+    // Handle keys that exist in defaults
+    if (key in defaultSettings) {
       // Parse the value based on the default type
       const defaultValue = defaultSettings[key];
       if (typeof defaultValue === 'number') {
@@ -37,6 +42,10 @@ export default defineEventHandler(async () => {
       } else {
         settings[key] = record.value as never;
       }
+    }
+    // Handle string-only keys not in defaults (like lastActiveModel)
+    else if (stringOnlyKeys.has(key)) {
+      settings[key] = record.value as never;
     }
   }
 
