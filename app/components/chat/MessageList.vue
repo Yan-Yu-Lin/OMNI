@@ -4,22 +4,24 @@
       <ChatWelcomeSection @suggestion-click="$emit('suggestion-click', $event)" />
     </template>
     <template v-else>
-      <ChatMessage
-        v-for="(message, index) in messages"
-        :key="message.id"
-        :message="message"
-        :is-streaming="isStreaming && isLastAssistantMessage(index)"
-      />
-    </template>
+      <div class="messages-container">
+        <ChatMessage
+          v-for="(message, index) in messages"
+          :key="message.id"
+          :message="message"
+          :is-streaming="isStreaming && isLastAssistantMessage(index)"
+        />
 
-    <div v-if="isStreaming && showPendingIndicator" class="streaming-indicator">
-      <div class="typing-dots">
-        <span class="dot" />
-        <span class="dot" />
-        <span class="dot" />
+        <div v-if="isStreaming && showPendingIndicator" class="streaming-indicator">
+          <div class="typing-dots">
+            <span class="dot" />
+            <span class="dot" />
+            <span class="dot" />
+          </div>
+          <span class="typing-text">AI is thinking...</span>
+        </div>
       </div>
-      <span class="typing-text">AI is thinking...</span>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -108,11 +110,17 @@ watch(
   flex-direction: column;
 }
 
+.messages-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding-top: 24px;
+}
+
 .streaming-indicator {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 32px 24px;
+  padding: 16px 24px 24px;
 }
 
 .typing-dots {

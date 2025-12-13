@@ -241,21 +241,22 @@ const formatBytes = (bytes: number): string => {
 }
 
 .message-content {
-  max-width: 75%;
   font-size: 15px;
   line-height: 1.7;
   color: #333;
 }
 
-/* User bubble */
+/* User bubble - limited width */
 .message.user .message-content {
+  max-width: 75%;
   background: #f8f8f8;
   padding: 12px 16px;
   border-radius: 18px 18px 4px 18px;
 }
 
-/* Assistant - no bubble */
+/* Assistant - full width, no bubble */
 .message.assistant .message-content {
+  width: 100%;
   padding: 0;
 }
 
