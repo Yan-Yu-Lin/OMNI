@@ -1,4 +1,4 @@
-import { defaultSettings, type Settings, type ProviderPreferences } from '~/types';
+import { defaultSettings, type Settings, type ProviderPreferences, type LastUsed } from '~/types';
 
 export function useSettings() {
   // Use useState for SSR-safe shared state across components
@@ -46,8 +46,13 @@ export function useSettings() {
   // Convenience computed for default model
   const defaultModel = computed(() => settings.value.model);
 
-  // Last active model (the model user last sent a message with)
-  const lastActiveModel = computed(() => settings.value.lastActiveModel || settings.value.model);
+  // Last used model+provider pair - single source of truth for new conversation defaults
+  const lastUsed = computed<LastUsed>(() =>
+    settings.value.lastUsed || defaultSettings.lastUsed!
+  );
+
+  // @deprecated Use lastUsed instead - kept for backward compatibility
+  const lastActiveModel = computed(() => lastUsed.value.model);
 
   // Get provider preferences for a specific model
   function getModelProviderPrefs(modelId: string): ProviderPreferences {
@@ -70,7 +75,8 @@ export function useSettings() {
     fetchSettings,
     updateSettings,
     defaultModel,
-    lastActiveModel,
+    lastUsed,
+    lastActiveModel, // @deprecated - use lastUsed instead
     getModelProviderPrefs,
     setModelProviderPrefs,
   };

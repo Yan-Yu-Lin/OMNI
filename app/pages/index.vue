@@ -33,11 +33,11 @@
         <div class="input-toolbar">
           <div class="toolbar-left">
             <ModelsModelSelector
-              v-if="models.length > 0"
+              v-if="models.length > 0 && selectedModelId"
               :model-value="selectedModelId"
               :models="models"
               :provider-preferences="providerPreferences"
-              @update:model-value="selectedModelId = $event; userHasSelectedModel = true"
+              @update:model-value="selectedModelId = $event"
               @update:provider-preferences="providerPreferences = $event"
             />
           </div>
@@ -76,7 +76,7 @@ import type { ProviderPreferences } from '~/types';
 
 const router = useRouter();
 const { setPendingMessage } = useConversations();
-const { settings, fetchSettings, lastActiveModel, getModelProviderPrefs, setModelProviderPrefs } = useSettings();
+const { fetchSettings, lastUsed, getModelProviderPrefs, setModelProviderPrefs } = useSettings();
 const { models, fetchModels } = useModels();
 
 // Local state
@@ -84,38 +84,52 @@ const inputText = ref('');
 const textareaRef = ref<HTMLTextAreaElement>();
 const isComposing = ref(false);
 
-// Model selection - defaults to last active model (set server-side when message is sent)
-const selectedModelId = ref(lastActiveModel.value);
-
-// Provider preferences - per-model (loaded based on selected model)
-const providerPreferences = ref<ProviderPreferences>(
-  getModelProviderPrefs(selectedModelId.value)
-);
-
-// Sync model with lastActiveModel once settings are loaded
-// Use immediate: false to avoid running on mount (before settings fetch)
-// Track if user has manually changed the model to avoid overwriting their choice
-const userHasSelectedModel = ref(false);
-
-watch(lastActiveModel, (newModel) => {
-  // Only update if settings loaded a different model AND user hasn't manually selected
-  if (newModel && !userHasSelectedModel.value && newModel !== selectedModelId.value) {
-    selectedModelId.value = newModel;
-    // Also load provider prefs for this model
-    providerPreferences.value = getModelProviderPrefs(newModel);
+// Helper to convert lastUsed.provider string to ProviderPreferences object
+function providerStringToPrefs(providerStr: string): ProviderPreferences {
+  if (providerStr === 'auto') {
+    return { mode: 'auto', sort: 'throughput' };
   }
+  // Specific provider
+  return { mode: 'specific', provider: providerStr };
+}
+
+// User override refs - null means use lastUsed as default
+const userModelOverride = ref<string | null>(null);
+const userProviderOverride = ref<ProviderPreferences | null>(null);
+
+// Computed model ID - uses user override or falls back to lastUsed
+const selectedModelId = computed({
+  get: () => userModelOverride.value ?? lastUsed.value.model,
+  set: (val: string) => { userModelOverride.value = val; },
 });
 
-// When model selection changes, load that model's provider preferences
-watch(selectedModelId, (newModel, oldModel) => {
-  if (newModel && newModel !== oldModel) {
-    providerPreferences.value = getModelProviderPrefs(newModel);
+// Computed provider - uses user override, per-model prefs, or lastUsed
+const providerPreferences = computed({
+  get: (): ProviderPreferences => {
+    if (userProviderOverride.value) {
+      return userProviderOverride.value;
+    }
+    // If user changed model, load per-model prefs for that model
+    if (userModelOverride.value) {
+      return getModelProviderPrefs(userModelOverride.value);
+    }
+    // Otherwise use lastUsed provider
+    return providerStringToPrefs(lastUsed.value.provider);
+  },
+  set: (val: ProviderPreferences) => { userProviderOverride.value = val; },
+});
+
+// When model selection changes (user picks different model), load that model's provider preferences
+watch(() => userModelOverride.value, (newModel) => {
+  if (newModel) {
+    // User changed model, load per-model provider prefs
+    userProviderOverride.value = getModelProviderPrefs(newModel);
   }
 });
 
 // When provider preferences change, save to per-model settings
-watch(providerPreferences, async (newPrefs, oldPrefs) => {
-  if (oldPrefs && selectedModelId.value && JSON.stringify(newPrefs) !== JSON.stringify(oldPrefs)) {
+watch(() => userProviderOverride.value, async (newPrefs) => {
+  if (newPrefs && selectedModelId.value) {
     await setModelProviderPrefs(selectedModelId.value, newPrefs);
   }
 }, { deep: true });
@@ -167,9 +181,9 @@ watch(inputText, async () => {
 });
 
 // Fetch data and focus on mount
-// Force refetch settings to get latest lastActiveModel (updated server-side when message is sent)
-onMounted(() => {
-  fetchSettings(true);
+// Force refetch settings to get latest lastUsed (updated server-side when message is sent)
+onMounted(async () => {
+  await fetchSettings(true);
   fetchModels();
   textareaRef.value?.focus();
 });

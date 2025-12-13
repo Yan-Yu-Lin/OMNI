@@ -104,4 +104,51 @@ try {
   console.error('[DB Migration] Error checking/adding pinned column:', e);
 }
 
+// Migration: Create lastUsed from existing lastActiveModel + modelProviderPreferences
+// This combines separate model and provider tracking into a single source of truth
+try {
+  const lastUsedRecord = db.prepare(
+    "SELECT value FROM settings WHERE key = 'lastUsed'"
+  ).get() as { value: string } | undefined;
+
+  // Only migrate if lastUsed doesn't exist yet
+  if (!lastUsedRecord) {
+    const lastActiveModelRecord = db.prepare(
+      "SELECT value FROM settings WHERE key = 'lastActiveModel'"
+    ).get() as { value: string } | undefined;
+
+    if (lastActiveModelRecord) {
+      const modelId = lastActiveModelRecord.value;
+      let provider = 'auto';
+
+      // Try to get the provider from modelProviderPreferences
+      const modelProviderPrefsRecord = db.prepare(
+        "SELECT value FROM settings WHERE key = 'modelProviderPreferences'"
+      ).get() as { value: string } | undefined;
+
+      if (modelProviderPrefsRecord) {
+        try {
+          const prefs = JSON.parse(modelProviderPrefsRecord.value);
+          const modelPrefs = prefs[modelId];
+          if (modelPrefs?.mode === 'specific' && modelPrefs?.provider) {
+            provider = modelPrefs.provider;
+          }
+          // For 'auto' mode, we just use 'auto' as the provider string
+        } catch {
+          // Ignore parse errors
+        }
+      }
+
+      const lastUsed = JSON.stringify({ model: modelId, provider });
+      db.prepare(`
+        INSERT INTO settings (key, value, updated_at)
+        VALUES ('lastUsed', ?, CURRENT_TIMESTAMP)
+      `).run(lastUsed);
+      console.log('[DB Migration] Created lastUsed from lastActiveModel:', { model: modelId, provider });
+    }
+  }
+} catch (e) {
+  console.error('[DB Migration] Error creating lastUsed:', e);
+}
+
 export default db;

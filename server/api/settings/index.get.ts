@@ -16,6 +16,7 @@ export default defineEventHandler(async () => {
   const settings: Settings = { ...defaultSettings };
 
   // Define keys that are strings (not in defaults but valid)
+  // lastActiveModel is deprecated but kept for backward compatibility
   const stringOnlyKeys = new Set(['lastActiveModel']);
 
   for (const record of records) {
@@ -47,6 +48,25 @@ export default defineEventHandler(async () => {
     else if (stringOnlyKeys.has(key)) {
       settings[key] = record.value as never;
     }
+  }
+
+  // Fallback: if lastUsed is still default but lastActiveModel exists, construct lastUsed from it
+  // This handles the case where DB has lastActiveModel but migration hasn't run yet
+  if (
+    settings.lastUsed?.model === defaultSettings.lastUsed?.model &&
+    settings.lastActiveModel &&
+    settings.lastActiveModel !== defaultSettings.model
+  ) {
+    // Get provider from modelProviderPreferences if available
+    let provider = 'auto';
+    const modelPrefs = settings.modelProviderPreferences?.[settings.lastActiveModel];
+    if (modelPrefs?.mode === 'specific' && modelPrefs?.provider) {
+      provider = modelPrefs.provider;
+    }
+    settings.lastUsed = {
+      model: settings.lastActiveModel,
+      provider,
+    };
   }
 
   return settings;

@@ -33,13 +33,22 @@ const { fetchConversations, getConversation, updateConversation, consumePendingM
 const { models, fetchModels } = useModels();
 
 // Settings composable for default model and per-model provider prefs
-const { settings, fetchSettings, updateSettings, lastActiveModel, getModelProviderPrefs, setModelProviderPrefs } = useSettings();
+const { fetchSettings, lastUsed, getModelProviderPrefs, setModelProviderPrefs } = useSettings();
+
+// Helper to convert lastUsed.provider string to ProviderPreferences object
+function providerStringToPrefs(providerStr: string): ProviderPreferences {
+  if (providerStr === 'auto') {
+    return { mode: 'auto', sort: 'throughput' };
+  }
+  // Specific provider
+  return { mode: 'specific', provider: providerStr };
+}
 
 // Providers composable
 const { markModelSeen } = useProviders();
 
-// Selected model - initialized from lastActiveModel (will be updated when conversation loads)
-const selectedModelId = ref(lastActiveModel.value);
+// Selected model - initialized from lastUsed (will be updated when conversation loads)
+const selectedModelId = ref(lastUsed.value.model);
 const selectedModelName = computed(() => {
   const model = models.value.find(m => m.id === selectedModelId.value);
   return model?.name || selectedModelId.value;
@@ -108,7 +117,7 @@ const initializeChat = (initialMessages: UIMessage[]) => {
         isDraftConversation.value = false;
       }
       fetchConversations(true); // Force refresh to update title/timestamp
-      fetchSettings(true); // Refresh settings to get updated lastActiveModel
+      fetchSettings(true); // Refresh settings to get updated lastUsed
     },
     onError: (error) => {
       console.error('[Chat] Error:', error);
@@ -150,11 +159,11 @@ const loadConversation = async () => {
     isDraftConversation.value = false;
     conversationStatus.value = conv.status;
 
-    // Use conversation's model if set, otherwise use lastActiveModel
+    // Use conversation's model if set, otherwise use lastUsed
     if (conv.model) {
       selectedModelId.value = conv.model;
     } else {
-      selectedModelId.value = lastActiveModel.value;
+      selectedModelId.value = lastUsed.value.model;
     }
 
     // Load provider preferences from conversation or per-model settings
@@ -182,10 +191,10 @@ const loadConversation = async () => {
     console.log('[Chat] Conversation not in DB yet, initializing draft mode');
     isDraftConversation.value = true;
     conversationStatus.value = 'idle';
-    selectedModelId.value = lastActiveModel.value;
 
-    // Load provider preferences for the selected model
-    providerPreferences.value = getModelProviderPrefs(selectedModelId.value);
+    // Use lastUsed for draft conversations - this is the single source of truth
+    selectedModelId.value = lastUsed.value.model;
+    providerPreferences.value = providerStringToPrefs(lastUsed.value.provider);
 
     initializeChat([]);
   }
@@ -248,8 +257,8 @@ watch(selectedModelId, async (newModel, oldModel) => {
     }
     // Load provider preferences for the new model
     providerPreferences.value = getModelProviderPrefs(newModel);
-    // Note: We don't update global settings.model here anymore
-    // lastActiveModel is updated server-side when a message is sent
+    // Note: We don't update global settings here
+    // lastUsed is only updated server-side when the FIRST message of a NEW conversation is sent
   }
 });
 
@@ -268,7 +277,7 @@ watch(providerPreferences, async (newPrefs, oldPrefs) => {
 
 // Load conversation and models on mount
 onMounted(async () => {
-  fetchSettings();
+  await fetchSettings(true); // Force refresh to get latest lastUsed
   fetchModels();
   await loadConversation();
 

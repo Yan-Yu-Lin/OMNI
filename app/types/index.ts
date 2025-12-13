@@ -35,6 +35,18 @@ export interface ConversationWithMessages extends Conversation {
 }
 
 // Settings types
+
+/**
+ * Last used model+provider pair for new conversations
+ * This is the single source of truth for what a new conversation should default to
+ */
+export interface LastUsed {
+  /** Model ID (e.g., "anthropic/claude-sonnet-4") */
+  model: string;
+  /** Provider slug (e.g., "anthropic", "groq") or "auto" for OpenRouter routing */
+  provider: string;
+}
+
 export interface Settings {
   model: string;
   systemPrompt: string;
@@ -45,8 +57,10 @@ export interface Settings {
   firecrawlApiKey: string;
   providerPreferences?: ProviderPreferences;
   pinnedModels: string[];
-  /** Last model user actually sent a message with (set server-side) */
+  /** @deprecated Use lastUsed instead - Last model user actually sent a message with (set server-side) */
   lastActiveModel?: string;
+  /** Last used model+provider pair - single source of truth for new conversation defaults */
+  lastUsed?: LastUsed;
   /** Per-model provider preferences (key: model ID, value: preferences) */
   modelProviderPreferences?: Record<string, ProviderPreferences>;
 }
@@ -61,6 +75,7 @@ export const defaultSettings: Settings = {
   firecrawlApiKey: '',
   pinnedModels: [],
   providerPreferences: { mode: 'auto', sort: 'throughput' },
+  lastUsed: { model: 'anthropic/claude-sonnet-4', provider: 'auto' },
   modelProviderPreferences: {},
 };
 
