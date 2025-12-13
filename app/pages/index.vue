@@ -192,14 +192,46 @@ onMounted(async () => {
 }
 
 .input-frame {
+  position: relative;
+  isolation: isolate;
   pointer-events: auto;
-  background: rgba(180, 180, 180, 0.4);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border-radius: 20px 20px 0 0;
   padding: 6px 6px 0 6px;
   width: 100%;
   max-width: 800px;
+}
+
+/* U-shaped frame with rounded hole in the middle */
+.input-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(180, 180, 180, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 20px 20px 0 0;
+  z-index: -1;
+
+  /* Mask: frame edges + rounded inner corners */
+  --frame: 6px;
+  --inner-r: 14px;
+  -webkit-mask:
+    /* top edge (between corners) */
+    linear-gradient(#000 0 0) var(--inner-r) 0 / calc(100% - var(--inner-r) * 2) var(--frame) no-repeat,
+    /* left edge (below corner) */
+    linear-gradient(#000 0 0) 0 var(--inner-r) / var(--frame) calc(100% - var(--inner-r)) no-repeat,
+    /* right edge (below corner) */
+    linear-gradient(#000 0 0) 100% var(--inner-r) / var(--frame) calc(100% - var(--inner-r)) no-repeat,
+    /* top-left corner arc */
+    radial-gradient(circle at calc(var(--frame) + var(--inner-r)) calc(var(--frame) + var(--inner-r)), transparent var(--inner-r), #000 var(--inner-r)) 0 0 / calc(var(--frame) + var(--inner-r)) calc(var(--frame) + var(--inner-r)) no-repeat,
+    /* top-right corner arc */
+    radial-gradient(circle at calc(0px - var(--inner-r)) calc(var(--frame) + var(--inner-r)), transparent var(--inner-r), #000 var(--inner-r)) 100% 0 / calc(var(--frame) + var(--inner-r)) calc(var(--frame) + var(--inner-r)) no-repeat;
+  mask:
+    linear-gradient(#000 0 0) var(--inner-r) 0 / calc(100% - var(--inner-r) * 2) var(--frame) no-repeat,
+    linear-gradient(#000 0 0) 0 var(--inner-r) / var(--frame) calc(100% - var(--inner-r)) no-repeat,
+    linear-gradient(#000 0 0) 100% var(--inner-r) / var(--frame) calc(100% - var(--inner-r)) no-repeat,
+    radial-gradient(circle at calc(var(--frame) + var(--inner-r)) calc(var(--frame) + var(--inner-r)), transparent var(--inner-r), #000 var(--inner-r)) 0 0 / calc(var(--frame) + var(--inner-r)) calc(var(--frame) + var(--inner-r)) no-repeat,
+    radial-gradient(circle at calc(0px - var(--inner-r)) calc(var(--frame) + var(--inner-r)), transparent var(--inner-r), #000 var(--inner-r)) 100% 0 / calc(var(--frame) + var(--inner-r)) calc(var(--frame) + var(--inner-r)) no-repeat;
 }
 
 .unified-input-container {
@@ -209,7 +241,7 @@ onMounted(async () => {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: none;
-  border-radius: 16px 16px 0 0;
+  border-radius: 14px 14px 0 0;
   overflow: hidden;
   width: 100%;
 }
