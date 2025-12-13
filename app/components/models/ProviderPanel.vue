@@ -76,7 +76,7 @@
             :key="provider.slug"
             class="provider-option"
             :class="{ selected: currentMode === 'specific' && currentProvider === provider.slug }"
-            @click="selectProvider(provider.slug)"
+            @click="selectProvider(provider.slug, provider.name)"
           >
             <div class="option-radio">
               <div class="radio-outer">
@@ -141,6 +141,7 @@ const error = ref<string | null>(null);
 // Current selection state
 const currentMode = ref<'auto' | 'specific'>(props.modelValue?.mode || 'auto');
 const currentProvider = ref<string | undefined>(props.modelValue?.provider);
+const currentProviderName = ref<string | undefined>(props.modelValue?.providerName);
 const currentSort = ref<'price' | 'latency' | 'throughput'>(props.modelValue?.sort || 'throughput');
 
 // Load providers when panel opens
@@ -154,6 +155,7 @@ watch(() => props.open, async (isOpen) => {
 watch(() => props.modelValue, (newValue) => {
   currentMode.value = newValue?.mode || 'auto';
   currentProvider.value = newValue?.provider;
+  currentProviderName.value = newValue?.providerName;
   currentSort.value = newValue?.sort || 'throughput';
 }, { immediate: true });
 
@@ -177,17 +179,20 @@ function retry() {
 function selectAuto() {
   currentMode.value = 'auto';
   currentProvider.value = undefined;
+  currentProviderName.value = undefined;
 }
 
-function selectProvider(slug: string) {
+function selectProvider(slug: string, name: string) {
   currentMode.value = 'specific';
   currentProvider.value = slug;
+  currentProviderName.value = name;
 }
 
 function confirm() {
   const preferences: ProviderPreferences = {
     mode: currentMode.value,
     provider: currentMode.value === 'specific' ? currentProvider.value : undefined,
+    providerName: currentMode.value === 'specific' ? currentProviderName.value : undefined,
     sort: currentMode.value === 'auto' ? currentSort.value : undefined,
   };
   emit('update:modelValue', preferences);

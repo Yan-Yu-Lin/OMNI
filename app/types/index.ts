@@ -9,8 +9,11 @@ export interface ProviderPreferences {
   /** Routing mode: 'auto' for OpenRouter routing, 'specific' for explicit provider */
   mode: 'auto' | 'specific';
 
-  /** Provider slug when mode='specific' */
+  /** Provider slug when mode='specific' (used for API routing) */
   provider?: string;
+
+  /** Provider display name when mode='specific' (used for UI display) */
+  providerName?: string;
 
   /** Sort strategy when mode='auto': optimize for price, latency, or throughput */
   sort?: 'price' | 'latency' | 'throughput';
@@ -45,6 +48,8 @@ export interface LastUsed {
   model: string;
   /** Provider slug (e.g., "anthropic", "groq") or "auto" for OpenRouter routing */
   provider: string;
+  /** Provider display name (e.g., "Google") for UI display */
+  providerName?: string;
 }
 
 export interface Settings {

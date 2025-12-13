@@ -300,7 +300,10 @@ const providerLabel = computed(() => {
     };
     return sortLabels[props.providerPreferences.sort || 'throughput'] || 'Auto';
   }
-  // Find provider name from slug
+  // Use stored name first, then try to find from providers, then fall back to slug
+  if (props.providerPreferences.providerName) {
+    return props.providerPreferences.providerName;
+  }
   const provider = providers.value.find(p => p.slug === props.providerPreferences?.provider);
   return provider?.name || props.providerPreferences.provider || 'Custom';
 });
@@ -428,9 +431,13 @@ function selectSpecificProvider(slug: string) {
 }
 
 function applyProviderChange() {
+  // Find the provider name from the loaded providers list
+  const selectedProvider = providers.value.find(p => p.slug === localProviderSlug.value);
+
   const newPrefs: ProviderPreferences = {
     mode: localProviderMode.value,
     provider: localProviderMode.value === 'specific' ? localProviderSlug.value : undefined,
+    providerName: localProviderMode.value === 'specific' ? selectedProvider?.name : undefined,
     sort: localProviderMode.value === 'auto' ? localProviderSort.value : undefined,
   };
   emit('update:providerPreferences', newPrefs);

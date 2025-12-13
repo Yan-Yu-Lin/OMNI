@@ -69,13 +69,17 @@ const { models, fetchModels } = useModels();
 // Settings composable for default model and per-model provider prefs
 const { fetchSettings, lastUsed, getModelProviderPrefs, setModelProviderPrefs } = useSettings();
 
-// Helper to convert lastUsed.provider string to ProviderPreferences object
-function providerStringToPrefs(providerStr: string): ProviderPreferences {
-  if (providerStr === 'auto') {
+// Helper to convert lastUsed to ProviderPreferences object
+function lastUsedToPrefs(lastUsed: { provider: string; providerName?: string }): ProviderPreferences {
+  if (lastUsed.provider === 'auto') {
     return { mode: 'auto', sort: 'throughput' };
   }
-  // Specific provider
-  return { mode: 'specific', provider: providerStr };
+  // Specific provider - include providerName for display
+  return {
+    mode: 'specific',
+    provider: lastUsed.provider,
+    providerName: lastUsed.providerName,
+  };
 }
 
 // Providers composable
@@ -102,6 +106,8 @@ const loadingChat = ref(true);
 const conversationStatus = ref<ConversationStatus>('idle');
 // Draft mode: conversation doesn't exist in DB yet (lazy creation)
 const isDraftConversation = ref(false);
+// Flag to skip model watcher during initial load (prevents overwriting loaded provider prefs)
+const isInitialLoad = ref(true);
 
 // Pending body params for branching - these are read by the transport body function
 // This ensures trigger and parentId are always sent to the server
@@ -258,7 +264,7 @@ const loadConversation = async () => {
 
     // Use lastUsed for draft conversations - this is the single source of truth
     selectedModelId.value = lastUsed.value.model;
-    providerPreferences.value = providerStringToPrefs(lastUsed.value.provider);
+    providerPreferences.value = lastUsedToPrefs(lastUsed.value);
 
     // Initialize with empty tree
     buildTree([], null);
@@ -266,6 +272,8 @@ const loadConversation = async () => {
   }
 
   loadingChat.value = false;
+  // Mark initial load as complete - subsequent model changes will load per-model prefs
+  isInitialLoad.value = false;
 };
 
 // Refresh from DB (fallback)
@@ -540,6 +548,10 @@ watch(selectedModelId, async (newModel, oldModel) => {
   // Only act if we have an old value (to avoid initial setup triggers)
   // and the value actually changed
   if (oldModel && newModel !== oldModel) {
+    // Skip during initial load - we'll use the conversation's saved provider prefs
+    if (isInitialLoad.value) {
+      return;
+    }
     // Save to conversation (per-conversation model) - only if not a draft
     if (!isDraftConversation.value) {
       await updateConversation(conversationId.value, { model: newModel });
@@ -553,6 +565,10 @@ watch(selectedModelId, async (newModel, oldModel) => {
 
 // Watch for provider preference changes - save to conversation and per-model settings
 watch(providerPreferences, async (newPrefs, oldPrefs) => {
+  // Skip during initial load to avoid overwriting DB with stale data
+  if (isInitialLoad.value) {
+    return;
+  }
   // Skip initial value and only save actual changes
   if (oldPrefs && JSON.stringify(newPrefs) !== JSON.stringify(oldPrefs)) {
     // Save to conversation - only if not a draft
@@ -585,6 +601,8 @@ watch(conversationId, () => {
   if (chat.value) {
     chat.value.stop();
   }
+  // Reset initial load flag for the new conversation
+  isInitialLoad.value = true;
   loadConversation();
 });
 </script>

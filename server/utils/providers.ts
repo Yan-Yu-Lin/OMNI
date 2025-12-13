@@ -44,6 +44,14 @@ export async function fetchModelProviders(modelId: string): Promise<ModelProvide
 
   const endpoints = response.data?.endpoints || [];
 
+  // Debug: log raw endpoint data to verify tag field
+  if (endpoints.length > 0) {
+    console.log('[Providers] Raw endpoint sample:', JSON.stringify({
+      providerName: endpoints[0].providerName,
+      tag: endpoints[0].tag,
+    }));
+  }
+
   return endpoints.map(transformEndpoint);
 }
 
@@ -52,6 +60,7 @@ export async function fetchModelProviders(modelId: string): Promise<ModelProvide
  */
 function transformEndpoint(endpoint: {
   providerName?: string;
+  tag?: string;
   contextLength?: number;
   maxCompletionTokens?: number;
   pricing?: {
@@ -75,9 +84,13 @@ function transformEndpoint(endpoint: {
   // Convert from per-token to per-million-tokens
   const MILLION = 1_000_000;
 
+  // Use tag directly - this is the actual routing slug OpenRouter expects
+  // e.g., "google-vertex" not normalized "google" from provider_name "Google"
+  const slug = endpoint.tag || normalizeProviderSlug(endpoint.providerName || 'unknown');
+
   return {
     name: endpoint.providerName || 'Unknown',
-    slug: normalizeProviderSlug(endpoint.providerName || 'unknown'),
+    slug,
     pricing: {
       prompt: promptPrice * MILLION,
       completion: completionPrice * MILLION,

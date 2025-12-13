@@ -147,6 +147,7 @@ export default defineEventHandler(async (event) => {
   const isNewConversation = ensureConversationExists(conversationId, selectedModel, providerPreferences);
   console.log('[Chat API] Conversation exists:', !isNewConversation, 'isNew:', isNewConversation);
   console.log('[Chat API] BranchAction:', branchAction, 'ParentId:', parentId);
+  console.log('[Chat API] ProviderPreferences:', JSON.stringify(providerPreferences));
 
   // 2. Handle different branch action types
   let userMessageId: string | undefined;
@@ -188,15 +189,18 @@ export default defineEventHandler(async (event) => {
   // This is the single source of truth for what new conversations should default to
   // Resuming old conversations should NOT change the user's default preference
   if (isNewConversation) {
-    // Determine provider string from preferences
+    // Determine provider string and name from preferences
     let providerStr = 'auto';
+    let providerName: string | undefined;
     if (providerPreferences?.mode === 'specific' && providerPreferences?.provider) {
       providerStr = providerPreferences.provider;
+      providerName = providerPreferences.providerName;
     }
 
     const lastUsed = JSON.stringify({
       model: selectedModel,
       provider: providerStr,
+      providerName,
     });
 
     db.prepare(`

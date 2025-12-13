@@ -6,6 +6,8 @@ const CACHE_TTL = 60 * 30; // 30 minutes (shorter than models cache since uptime
 
 export default defineEventHandler(async (event): Promise<ProvidersApiResponse> => {
   const model = getRouterParam(event, 'model');
+  const query = getQuery(event);
+  const forceRefresh = query.refresh === 'true';
 
   if (!model) {
     throw createError({
@@ -17,13 +19,17 @@ export default defineEventHandler(async (event): Promise<ProvidersApiResponse> =
   // Decode the model ID (it may be URL-encoded)
   const modelId = decodeURIComponent(model);
 
-  // Check cache first
+  // Check cache first (unless force refresh)
   const cacheKey = `providers:${modelId}`;
-  const cached = getCacheValue<ProvidersApiResponse>(cacheKey);
 
-  if (cached) {
-    console.log(`[Providers API] Cache hit for ${modelId}`);
-    return cached;
+  if (!forceRefresh) {
+    const cached = getCacheValue<ProvidersApiResponse>(cacheKey);
+    if (cached) {
+      console.log(`[Providers API] Cache hit for ${modelId}`);
+      return cached;
+    }
+  } else {
+    console.log(`[Providers API] Force refresh for ${modelId}`);
   }
 
   console.log(`[Providers API] Fetching providers for ${modelId}`);
