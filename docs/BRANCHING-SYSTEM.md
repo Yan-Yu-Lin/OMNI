@@ -1,231 +1,415 @@
 # Conversation Branching System
 
+This document explains how the conversation branching system works, enabling users to edit messages, regenerate AI responses, and navigate between different conversation branches.
+
 ## Overview
 
-This document outlines the design for implementing conversation branching - the ability to edit messages or regenerate AI responses, creating alternative conversation paths that users can navigate between.
-
-**User Experience Goal:**
-- User edits a message → creates a new branch from that point
-- User clicks "regenerate" on AI response → creates sibling response
-- Navigation arrows `< 1/2 >` appear when a message has siblings
-- User can switch between branches to explore different conversation paths
+The branching system allows conversations to form a **tree structure** instead of a linear sequence. Users can:
+- **Edit** a previous message → creates a new branch from that point
+- **Regenerate** an AI response → creates a sibling response
+- **Navigate** between branches using `< 1/2 >` controls
 
 ---
 
-## Core Concept: Tree Structure with `parent_id`
+## Database Schema
 
-Every message points to its parent. This creates a tree where:
-- **Root message**: `parent_id = null`
-- **Siblings**: Messages with the same `parent_id` (created by edit/regenerate)
-- **Active path**: The chain from root to the currently viewed leaf
+### Messages Table
 
-### Example Tree
+Each message has a `parent_id` pointing to its parent message:
 
-```
-User: "Hello" (msg_1, parent: null)
-│
-├─► AI: "Hi there!" (msg_2, parent: msg_1)      ← < 1/2 >
-│   │
-│   └─► User: "Tell me about Vue" (msg_3, parent: msg_2)
-│       │
-│       ├─► AI: "Vue is a framework..." (msg_4, parent: msg_3)    ← < 1/2 >
-│       │   └─► User: "More details" (msg_5, parent: msg_4)
-│       │       └─► AI: "Sure, Vue has..." (msg_6, parent: msg_5)
-│       │
-│       └─► AI: "Vue.js is progressive..." (msg_7, parent: msg_3)  [regenerate]
-│           └─► User: "What about React?" (msg_8, parent: msg_7)
-│               └─► AI: "React is..." (msg_9, parent: msg_8)
-│
-└─► AI: "Hey! How can I help?" (msg_10, parent: msg_1)  [regenerate]
-    └─► User: "What's 2+2?" (msg_11, parent: msg_10)
-        └─► AI: "4" (msg_12, parent: msg_11)
-```
-
-### Key Operations
-
-| Operation | Result |
-|-----------|--------|
-| Find siblings | `SELECT * FROM messages WHERE parent_id = X` |
-| Count siblings | `SELECT COUNT(*) FROM messages WHERE parent_id = X` |
-| Get active path | Walk up from leaf following `parent_id` until null |
-| Create branch | Insert new message with same `parent_id` as sibling |
-
----
-
-## Data Model Changes
-
-### Current Schema (messages table)
 ```sql
-id              TEXT PRIMARY KEY
-conversation_id TEXT
-role            TEXT (user/assistant)
-content         TEXT (JSON)
-created_at      TEXT
-updated_at      TEXT
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT,
+  role TEXT,              -- 'user' | 'assistant'
+  content TEXT,           -- JSON with message parts
+  parent_id TEXT,         -- NULL for root, otherwise points to parent
+  created_at DATETIME,
+  FOREIGN KEY (parent_id) REFERENCES messages(id)
+);
+
+CREATE INDEX idx_messages_parent_id ON messages(parent_id);
 ```
 
-### Proposed Addition
+### Conversations Table
+
+Tracks which branch is currently active:
+
 ```sql
-parent_id       TEXT (nullable, references messages.id)
+CREATE TABLE conversations (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  active_leaf_id TEXT,    -- Points to the current endpoint message
+  -- ... other fields
+  FOREIGN KEY (active_leaf_id) REFERENCES messages(id)
+);
 ```
 
-- `parent_id = null` → root message (first message in conversation)
-- `parent_id = <msg_id>` → this message follows that parent
+---
 
-### Tracking Active Branch
+## Tree Structure Example
 
-We need to know which leaf the user is currently viewing. Options:
-
-**Option A: Store in conversation metadata**
-```sql
--- conversations table
-active_leaf_id  TEXT (references messages.id)
+```
+msg_1 (user: "hello")              parent_id: NULL
+  └── msg_2 (assistant: "hi!")     parent_id: msg_1
+        └── msg_3 (user: "how?")   parent_id: msg_2
+              ├── msg_4 (assistant: "I'm good")   parent_id: msg_3  ← Branch A
+              └── msg_5 (assistant: "I'm great")  parent_id: msg_3  ← Branch B
+                    └── msg_6 (user: "cool")      parent_id: msg_5
+                          └── msg_7 (assistant)   parent_id: msg_6  ← active_leaf_id
 ```
 
-**Option B: Store active child per message**
-```sql
--- messages table
-active_child_id TEXT (nullable, references messages.id)
+If `active_leaf_id = msg_7`, the **active path** is: `[msg_1, msg_2, msg_3, msg_5, msg_6, msg_7]`
+
+Note: `msg_4` is on a different branch and won't be displayed until the user switches to it.
+
+---
+
+## Key Components
+
+### Server-Side
+
+| File | Purpose |
+|------|---------|
+| `server/api/chat.post.ts` | Handles message creation with branching logic |
+| `server/utils/chat-persistence.ts` | Database operations for messages |
+| `server/api/conversations/[id].get.ts` | Returns all messages + activeLeafId |
+| `server/api/conversations/[id]/switch-branch.post.ts` | Switches active branch |
+
+### Client-Side
+
+| File | Purpose |
+|------|---------|
+| `app/composables/useMessageTree.ts` | Tree building and path computation |
+| `app/pages/chat/[id].vue` | Main chat page with edit/regenerate handlers |
+| `app/components/chat/BranchNavigation.vue` | `< 1/2 >` navigation UI |
+
+---
+
+## How It Works
+
+### 1. Building the Tree (Client)
+
+When a conversation loads, `buildTree()` in `useMessageTree.ts` creates lookup maps:
+
+```typescript
+function buildTree(messages: BranchMessage[], leafId: string | null) {
+  messageMap.clear();
+  childrenMap.clear();
+  activeLeafId = leafId;
+
+  for (const msg of messages) {
+    // Index by ID for quick lookup
+    messageMap.set(msg.id, msg);
+
+    // Group children by parent
+    const parentKey = msg.parentId;
+    if (!childrenMap.has(parentKey)) {
+      childrenMap.set(parentKey, []);
+    }
+    childrenMap.get(parentKey).push(msg.id);
+  }
+}
 ```
 
-**Option C: Derive from URL/state**
-- Store current leaf ID in URL: `/chat/abc123?leaf=msg_6`
-- Or in client-side state
+### 2. Computing the Active Path
 
-**Recommendation:** Option A is simplest - one field tracks where the user "is" in the tree.
+`getActivePath()` walks **backwards** from `active_leaf_id` to root:
 
----
+```typescript
+function getActivePath(): BranchMessage[] {
+  if (!activeLeafId) return [];
 
-## Implementation Components
+  const path: BranchMessage[] = [];
+  let currentId: string | null = activeLeafId;
 
-### 1. Database Migration
-- Add `parent_id` column to messages table
-- Add `active_leaf_id` to conversations table (or chosen tracking method)
-- Existing messages: set `parent_id` based on sequence (each message points to previous)
+  // Walk from leaf to root
+  while (currentId) {
+    const msg = messageMap.get(currentId);
+    if (!msg) break;
+    path.unshift(msg);        // Add to front (builds root→leaf order)
+    currentId = msg.parentId; // Move to parent
+  }
 
-### 2. API Changes
-
-**When saving messages:**
-- Include `parent_id` when creating a message
-- For normal flow: `parent_id` = previous message's ID
-- For edit/regenerate: `parent_id` = same as the sibling's parent
-
-**When loading conversation:**
-- Return messages as flat list with `parent_id` field
-- Client builds tree structure
-- Or: server builds tree and returns nested structure
-
-**When sending to AI:**
-- Only send the active path (root → current leaf)
-- Not the entire tree
-
-### 3. UI Components
-
-**Branch Navigation (`< 1/2 >`):**
-- Show on messages that have siblings
-- Display: `< {current_index} / {total_siblings} >`
-- Left/right arrows to switch between siblings
-- Switching updates `active_leaf_id` and re-renders the path
-
-**Edit Button (user messages):**
-- Opens message for editing
-- On submit: creates new user message with same `parent_id`
-- Then triggers AI response (child of the new message)
-
-**Regenerate Button (AI messages):**
-- Creates new AI message with same `parent_id` as current
-- Streams new response
-- User can then navigate between original and regenerated
-
-### 4. State Management
-
-Client needs to track:
-- Full message tree (all branches)
-- Active path (currently displayed messages)
-- Current leaf ID
-
-When user navigates branches:
-- Update active leaf ID
-- Recalculate active path
-- Re-render message list
-
----
-
-## AI Context Handling
-
-The AI should only "see" the active path, not all branches.
-
-**Example:** If user is viewing `msg_6` in the tree above:
-```
-Active path: msg_1 → msg_2 → msg_3 → msg_4 → msg_5 → msg_6
-
-Send to AI:
-[
-  { role: "user", content: "Hello" },
-  { role: "assistant", content: "Hi there!" },
-  { role: "user", content: "Tell me about Vue" },
-  { role: "assistant", content: "Vue is a framework..." },
-  { role: "user", content: "More details" },
-  { role: "assistant", content: "Sure, Vue has..." }
-]
+  return path;  // Returns [root, ..., leaf]
+}
 ```
 
-The AI never sees msg_7, msg_8, msg_9, msg_10, msg_11, msg_12 - those are on different branches.
+### 3. Syncing with Vercel AI SDK
+
+The Vercel AI SDK maintains its own internal `messages` array. We must sync it with our computed path:
+
+```typescript
+// Access SDK internals
+const anyChat = chat.value as any;
+
+// Update the internal reactive ref
+if (anyChat?.state?.messagesRef) {
+  anyChat.state.messagesRef.value = ourComputedPath;
+}
+
+// Call setMessages if available
+if (typeof anyChat.setMessages === 'function') {
+  anyChat.setMessages(ourComputedPath);
+}
+
+// Update local state
+chatMessages.value = ourComputedPath;
+```
+
+### 4. Handling Branch Actions
+
+The client sends a `branchAction` field to indicate the operation type:
+
+| Action | Description |
+|--------|-------------|
+| `submit` | Normal new message |
+| `edit` | Editing an existing message (creates sibling user message) |
+| `regenerate` | Regenerating AI response (creates sibling assistant message) |
+
+> **Note:** We use `branchAction` instead of `trigger` because the Vercel AI SDK internally uses `trigger` and overwrites it with its own value.
 
 ---
 
-## Open Questions for Research
+## Operation Flows
 
-1. **Migration strategy**: How to migrate existing linear conversations to tree structure?
-   - Set each message's `parent_id` to the previous message's ID
-   - Set `active_leaf_id` to the last message
+### Normal Message Send
 
-2. **Vercel AI SDK compatibility**: Does the SDK support non-linear message arrays?
-   - May need to flatten tree to array before sending
-   - Check how `UIMessage` type handles this
+```
+1. User types message, clicks send
+2. Client: branchAction = 'submit', parentId = current active_leaf_id
+3. Server: saves user message with parent_id
+4. Server: streams AI response
+5. Server: saves assistant message, updates active_leaf_id
+6. Client: reloadAndRebuildTree() → displays new path
+```
 
-3. **Streaming with branches**: When regenerating, how to handle the stream?
-   - Create placeholder message, stream into it
-   - On complete, it becomes a sibling
+### Edit Message
 
-4. **Performance**: For very branched conversations, loading entire tree may be slow
-   - Consider lazy loading branches
-   - Or limit branch depth
+```
+1. User clicks edit on message (e.g., msg_3)
+2. Client: gets parentId = msg_3's parent (msg_2)
+3. Client: truncates SDK array to [msg_1, msg_2]
+4. Client: branchAction = 'edit', parentId = msg_2
+5. Server: saves NEW user message with parent_id = msg_2 (sibling to msg_3)
+6. Server: streams AI response, saves, updates active_leaf_id
+7. Client: reloadAndRebuildTree() → displays new branch
+8. UI shows "< 1/2 >" on msg_3's siblings
+```
 
-5. **UI/UX details**:
-   - Where exactly to show `< 1/2 >` navigation?
-   - How to indicate "you're not on the main branch"?
-   - Should collapsed branches be visible somehow?
+### Regenerate AI Response
+
+```
+1. User clicks regenerate on assistant message (e.g., msg_4)
+2. Client: gets parentId = msg_4's parent (msg_3, the user message)
+3. Client: truncates SDK array to [msg_1, msg_2] (before msg_3)
+4. Client: branchAction = 'regenerate', parentId = msg_3
+5. Client: resends msg_3's text via sendMessage()
+6. Server: sees branchAction = 'regenerate'
+7. Server: does NOT save new user message (uses existing msg_3)
+8. Server: saves NEW assistant message with parent_id = msg_3 (sibling to msg_4)
+9. Client: reloadAndRebuildTree() → displays new branch
+10. UI shows "< 1/2 >" on msg_4's siblings
+```
+
+### Switch Branch
+
+```
+1. User clicks ">" on branch navigation
+2. Client: calls switchToBranch(conversationId, siblingMessageId)
+3. Server: finds deepest leaf of that branch, updates active_leaf_id
+4. Client: reloadAndRebuildTree() → displays selected branch
+```
 
 ---
 
-## Implementation Priority
+## Server-Side Branch Logic
 
-| Phase | Task | Complexity |
-|-------|------|------------|
-| 1 | Database schema migration | Low |
-| 2 | API: save with parent_id | Low |
-| 3 | API: load and build tree | Medium |
-| 4 | UI: branch navigation component | Medium |
-| 5 | Edit message flow | Medium |
-| 6 | Regenerate flow | Medium |
-| 7 | AI context (active path only) | Low |
+In `server/api/chat.post.ts`:
+
+```typescript
+if (effectiveAction === 'regenerate') {
+  // Don't save new user message - just create sibling assistant
+  userMessageId = parentId;  // Use existing user message as parent
+
+} else if (effectiveAction === 'edit') {
+  // Save new user message as sibling
+  userMessageId = userMessage.id;
+  saveUserMessage(conversationId, userMessage, parentId);
+
+} else {
+  // Normal submit - save with derived parent
+  let effectiveParentId = parentId;
+  if (!effectiveParentId && !isNewConversation) {
+    // Use current active_leaf_id as parent
+    const conv = db.prepare('SELECT active_leaf_id FROM conversations WHERE id = ?')
+      .get(conversationId);
+    effectiveParentId = conv?.active_leaf_id;
+  }
+  userMessageId = userMessage.id;
+  saveUserMessage(conversationId, userMessage, effectiveParentId);
+}
+
+// Later: save assistant message with userMessageId as parent
+saveAssistantMessages(conversationId, mockMessages, userMessageId);
+updateActiveLeaf(conversationId, assistantMessageId);
+```
 
 ---
 
-## Related Files
+## Flow Diagram
 
-Current implementation (for reference during research):
-- `server/db/index.ts` - Database schema and migrations
-- `server/api/chat.post.ts` - Chat streaming endpoint
-- `server/utils/chat-persistence.ts` - Message saving logic
-- `app/pages/chat/[id].vue` - Chat page, message handling
-- `app/components/chat/Message.vue` - Message component (has edit/regenerate buttons)
-- `app/composables/useConversations.ts` - Conversation state management
+```
+USER CLICKS REGENERATE
+         │
+         ▼
+┌─────────────────────────────┐
+│ 1. Get parent user message  │
+│    parentId = msg_3         │
+└─────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│ 2. Truncate SDK array to    │
+│    BEFORE user message      │
+│    [msg_1, msg_2]           │
+└─────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│ 3. Set branchAction =       │
+│    'regenerate'             │
+│    parentId = msg_3         │
+└─────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│ 4. sendMessage(same text)   │
+│    SDK adds new user msg    │
+│    Server streams response  │
+└─────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│ 5. Server: branchAction =   │
+│    'regenerate' → DON'T     │
+│    save new user message    │
+│    Save assistant as        │
+│    sibling (parent=msg_3)   │
+└─────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│ 6. Update active_leaf_id    │
+│    to new assistant msg     │
+└─────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│ 7. Client: reloadAndRebuild │
+│    Tree → getActivePath()   │
+│    → Swap SDK array         │
+└─────────────────────────────┘
+```
 
 ---
 
-## References
+## SDK Compatibility Issues & Solutions
 
-- Visualization: `docs/branching-visualization.html`
-- Similar implementations: ChatGPT, Claude.ai both support this pattern
+### 1. Empty Message ID
+
+**Problem:** The SDK's `responseMessage.id` returns an empty string `""`, causing `active_leaf_id` to never be set.
+
+**Solution:** Generate our own ID using `nanoid()`:
+```typescript
+const assistantMessageId = responseMessage.id || nanoid();
+```
+
+### 2. Field Name Collision
+
+**Problem:** The SDK internally uses a field named `trigger` and overwrites any value we set.
+
+**Solution:** Renamed our field to `branchAction`.
+
+### 3. Internal State Access
+
+**Note:** We access `chat.state.messagesRef` directly for instant reactivity. This is undocumented SDK behavior and may break in future versions.
+
+---
+
+## Truncation Before Send
+
+Before sending an edit or regenerate, we truncate the SDK's array so the new message appears at the correct position:
+
+```typescript
+// For edit: truncate to BEFORE the edited message
+const truncatedMessages = currentMessages.slice(0, editedIndex);
+
+// For regenerate: truncate to BEFORE the user message
+const messagesBeforeUser = chatMessages.value.slice(0, parentIndex);
+
+// Then update SDK state
+anyChat.state.messagesRef.value = truncatedMessages;
+anyChat.setMessages(truncatedMessages);
+chatMessages.value = truncatedMessages;
+```
+
+---
+
+## Reloading After Operations
+
+After any branch operation completes, we reload from the server to ensure consistency:
+
+```typescript
+const reloadAndRebuildTree = async () => {
+  // Fetch fresh data from server
+  const conv = await getConversation(conversationId);
+
+  // Rebuild tree structure
+  buildTree(conv.messages, conv.activeLeafId);
+
+  // Compute new active path
+  const newPath = getActivePath();
+
+  // Sync everything
+  chatMessages.value = newPath;
+  anyChat.state.messagesRef.value = newPath;
+  anyChat.setMessages(newPath);
+};
+```
+
+---
+
+## Files Reference
+
+| File | Purpose |
+|------|---------|
+| `server/db/index.ts` | Migration adding `parent_id`, `active_leaf_id` |
+| `server/utils/chat-persistence.ts` | `saveUserMessage()`, `saveAssistantMessages()`, `updateActiveLeaf()`, `getActivePath()` |
+| `server/api/chat.post.ts` | `branchAction` handling, nanoid for assistant ID |
+| `server/api/conversations/[id].get.ts` | Returns `activeLeafId`, messages with `parentId` |
+| `server/api/conversations/[id]/switch-branch.post.ts` | Branch switching endpoint |
+| `app/types/index.ts` | `BranchMessage`, `SiblingInfo` types |
+| `app/composables/useMessageTree.ts` | `buildTree()`, `getActivePath()`, `getSiblingInfo()`, `switchToBranch()` |
+| `app/pages/chat/[id].vue` | `handleEdit()`, `submitEdit()`, `handleRegenerate()`, `reloadAndRebuildTree()` |
+| `app/components/chat/BranchNavigation.vue` | `< 1/2 >` navigation component |
+| `app/components/chat/Message.vue` | Displays branch navigation, edit/regenerate buttons |
+
+---
+
+## Testing Checklist
+
+- [ ] Send normal messages → parent chain is correct in DB
+- [ ] Edit first message → creates branch at root level
+- [ ] Edit middle message → creates branch, navigation shows `< 1/2 >`
+- [ ] Regenerate AI → creates sibling assistant, no duplicate user message
+- [ ] Switch branch → displays correct path
+- [ ] Refresh page → correct branch still displayed
+- [ ] New messages after branch switch → continue from correct leaf
+- [ ] Deep branching → multiple levels work correctly
+
+---
+
+## Visualization
+
+See `docs/branching-visualization.html` for an interactive tree visualization.
