@@ -1,17 +1,6 @@
 <template>
   <div class="message" :class="[message.role, { streaming: isStreaming }]">
-    <div class="message-avatar">
-      <div class="avatar" :class="message.role">
-        {{ message.role === 'user' ? 'Y' : 'A' }}
-      </div>
-    </div>
-    <div class="message-body">
-      <div class="message-header">
-        <span class="message-role">{{
-          message.role === 'user' ? 'You' : 'Assistant'
-        }}</span>
-      </div>
-      <div class="message-content">
+    <div class="message-content">
         <template v-for="(part, index) in message.parts" :key="index">
           <!-- Text parts -->
           <div v-if="part.type === 'text'" class="text-part">
@@ -200,7 +189,6 @@
           v-if="isStreaming && (!message.parts || message.parts.length === 0)"
           class="cursor"
         />
-      </div>
     </div>
   </div>
 </template>
@@ -241,62 +229,34 @@ const formatBytes = (bytes: number): string => {
 <style scoped>
 .message {
   display: flex;
-  gap: 16px;
-  padding: 24px 32px;
+  padding: 8px 24px;
 }
 
 .message.user {
-  background: #f8f8f8;
+  justify-content: flex-end;
 }
 
 .message.assistant {
-  background: #fff;
-}
-
-.message-avatar {
-  flex-shrink: 0;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.avatar.user {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-}
-
-.avatar.assistant {
-  background: #171717;
-  color: #fff;
-}
-
-.message-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.message-header {
-  margin-bottom: 6px;
-}
-
-.message-role {
-  font-size: 13px;
-  font-weight: 600;
-  color: #171717;
+  justify-content: flex-start;
 }
 
 .message-content {
+  max-width: 75%;
   font-size: 15px;
   line-height: 1.7;
   color: #333;
+}
+
+/* User bubble */
+.message.user .message-content {
+  background: #f8f8f8;
+  padding: 12px 16px;
+  border-radius: 18px 18px 4px 18px;
+}
+
+/* Assistant - no bubble */
+.message.assistant .message-content {
+  padding: 0;
 }
 
 .text-part {
