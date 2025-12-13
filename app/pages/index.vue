@@ -200,7 +200,7 @@ onMounted(async () => {
   isolation: isolate;
   pointer-events: auto;
   border-radius: 20px 20px 0 0;
-  padding: 6px 6px 0 6px;
+  padding: 8px 8px 0 8px;
   width: 100%;
   max-width: 800px;
 }
@@ -210,14 +210,14 @@ onMounted(async () => {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(180, 180, 180, 0.4);
+  background: rgba(220, 220, 220, 0.3);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   border-radius: 20px 20px 0 0;
   z-index: -1;
 
   /* Mask: frame edges + rounded inner corners */
-  --frame: 6px;
+  --frame: 8px;
   --inner-r: 14px;
   -webkit-mask:
     /* top edge (between corners) */
