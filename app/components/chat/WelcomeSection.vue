@@ -35,8 +35,9 @@ const suggestions = [
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 48px 24px;
+  padding-top: 20vh; /* Position ~20% from top */
   padding-bottom: 160px; /* Space for input */
 }
 

@@ -62,6 +62,8 @@ defineEmits<{
 
 .conversation-item.active {
   background: #e0e0e0;
+  border-left: 3px solid #171717;
+  padding-left: 9px; /* 12px - 3px border */
 }
 
 .conversation-title {
