@@ -15,7 +15,6 @@
           v-model="inputText"
           :placeholder="inputPlaceholder"
           rows="1"
-          :disabled="isStreaming"
           @keydown="handleKeydown"
           @compositionstart="isComposing = true"
           @compositionend="isComposing = false"
@@ -91,12 +90,7 @@ const inputText = ref('');
 const textareaRef = ref<HTMLTextAreaElement>();
 const isComposing = ref(false);
 
-const inputPlaceholder = computed(() => {
-  if (props.isStreaming) {
-    return 'Wait for the response...';
-  }
-  return 'Send a message...';
-});
+const inputPlaceholder = 'Send a message...';
 
 const handleSubmit = () => {
   const text = inputText.value.trim();
@@ -111,8 +105,8 @@ const handleSubmit = () => {
 };
 
 const handleKeydown = (e: KeyboardEvent) => {
-  // Submit on Enter (without Shift), but not during IME composition
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isComposing.value) {
+  // Submit on Enter (without Shift), but not during IME composition or streaming
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !isComposing.value && !props.isStreaming) {
     e.preventDefault();
     handleSubmit();
   }
@@ -258,11 +252,6 @@ const handleSuggestionClick = (suggestion: string) => {
 
 .unified-input-container textarea:focus {
   outline: none;
-}
-
-.unified-input-container textarea:disabled {
-  color: #a0a0a0;
-  cursor: not-allowed;
 }
 
 .input-toolbar {
