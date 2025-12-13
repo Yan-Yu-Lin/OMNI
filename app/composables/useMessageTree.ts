@@ -40,7 +40,20 @@ export function useMessageTree() {
    * @returns Array of messages from root to leaf in order
    */
   function getActivePath(): BranchMessage[] {
-    if (!activeLeafId.value) return [];
+    console.log('[Tree] getActivePath - activeLeafId:', activeLeafId.value);
+    console.log('[Tree] getActivePath - messageMap has', messageMap.value.size, 'messages');
+
+    if (!activeLeafId.value) {
+      console.warn('[Tree] getActivePath - no activeLeafId set!');
+      return [];
+    }
+
+    // Check if activeLeafId exists in map
+    if (!messageMap.value.has(activeLeafId.value)) {
+      console.error('[Tree] getActivePath - activeLeafId NOT FOUND in messageMap!');
+      console.log('[Tree] Available IDs:', Array.from(messageMap.value.keys()));
+      return [];
+    }
 
     const path: BranchMessage[] = [];
     let currentId: string | null = activeLeafId.value;
@@ -53,6 +66,7 @@ export function useMessageTree() {
       currentId = msg.parentId;
     }
 
+    console.log('[Tree] getActivePath - returning', path.length, 'messages');
     return path;
   }
 

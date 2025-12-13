@@ -5,6 +5,7 @@ import {
   convertToModelMessages,
   stepCountIs,
 } from 'ai';
+import { nanoid } from 'nanoid';
 import { getOpenRouterClient } from '../utils/openrouter';
 import { createAllTools } from '../tools';
 import {
@@ -65,7 +66,7 @@ interface ChatRequestBody {
   model?: string;
   providerPreferences?: ProviderPreferences;
   parentId?: string; // Parent message ID for branching support
-  trigger?: 'submit' | 'edit' | 'regenerate'; // What triggered this request
+  branchAction?: 'submit' | 'edit' | 'regenerate'; // What triggered this request (renamed from 'trigger' to avoid SDK collision)
 }
 
 const SYSTEM_PROMPT = `You are a helpful assistant with access to web tools and a sandbox environment.
@@ -100,7 +101,7 @@ Always explain what you're doing and show relevant output to the user.`;
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<ChatRequestBody>(event);
-  const { messages, conversationId, model, providerPreferences, parentId, trigger } = body;
+  const { messages, conversationId, model, providerPreferences, parentId, branchAction } = body;
 
   // Debug: Log what we received
   console.log('[Chat API] Received request for conversation:', conversationId);
@@ -129,37 +130,56 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // Extract text from user message parts
+  const userMessageText = userMessage.parts
+    ?.filter((p: { type: string }) => p.type === 'text')
+    .map((p: { text?: string }) => p.text || '')
+    .join('') || '';
+
+  // Check if this is an empty message (used for regenerate)
+  const isEmptyUserMessage = !userMessageText.trim();
+  console.log('[Chat API] User message text:', userMessageText.substring(0, 50), 'isEmpty:', isEmptyUserMessage);
+
   // Use provided model, or read default from settings
   const selectedModel = model || getDefaultModel();
 
   // 1. Ensure conversation exists (creates if needed for lazy creation)
   const isNewConversation = ensureConversationExists(conversationId, selectedModel, providerPreferences);
   console.log('[Chat API] Conversation exists:', !isNewConversation, 'isNew:', isNewConversation);
-  console.log('[Chat API] Trigger:', trigger, 'ParentId:', parentId);
+  console.log('[Chat API] BranchAction:', branchAction, 'ParentId:', parentId);
 
-  // 2. Handle regenerate vs normal flow
-  // For regenerate: don't save a new user message, just create sibling assistant response
-  // The parentId is the user message that the new assistant response branches from
+  // 2. Handle different branch action types
   let userMessageId: string | undefined;
 
-  if (trigger === 'regenerate') {
-    // Regenerate: parentId is the user message to branch from
-    // Don't save a new user message - just generate new assistant response
+  // Treat empty user messages as regenerate (defensive check)
+  // This prevents accidental saving of empty messages from SDK quirks
+  const effectiveAction = (isEmptyUserMessage && parentId) ? 'regenerate' : branchAction;
+  if (effectiveAction !== branchAction) {
+    console.log('[Chat API] Treating empty message as regenerate (was:', branchAction, ')');
+  }
+
+  if (effectiveAction === 'regenerate') {
+    // Regenerate: don't save a new user message, just create sibling assistant response
+    // parentId is the existing user message to branch from
     userMessageId = parentId;
     console.log('[Chat API] Regenerate mode - using existing user message:', userMessageId);
+  } else if (effectiveAction === 'edit') {
+    // Edit: save new user message as sibling branch
+    // parentId is the message BEFORE the one being edited (the edit creates a sibling)
+    userMessageId = userMessage.id;
+    saveUserMessage(conversationId, userMessage, parentId);
+    console.log('[Chat API] Edit mode - new user message with parent:', parentId);
   } else {
-    // Normal or edit flow: save the user message
+    // Normal submit flow: save user message with derived parent
 
-    // Determine effective parentId for branching
     // If no parentId provided and not a new conversation, use the current active_leaf_id
     let effectiveParentId = parentId;
     if (!effectiveParentId && !isNewConversation) {
       const conv = db.prepare('SELECT active_leaf_id FROM conversations WHERE id = ?').get(conversationId) as { active_leaf_id: string | null } | undefined;
       effectiveParentId = conv?.active_leaf_id ?? undefined;
     }
-    console.log('[Chat API] Effective parentId:', effectiveParentId);
+    console.log('[Chat API] Submit mode - effective parentId:', effectiveParentId);
 
-    // 3. Save the user message to DB with parentId for branching
     userMessageId = userMessage.id;
     saveUserMessage(conversationId, userMessage, effectiveParentId);
   }
@@ -202,12 +222,18 @@ export default defineEventHandler(async (event) => {
     autoGenerateTitle(conversationId, userMessage);
   }
 
-  // 5. Set conversation status to streaming
+  // 3. Prepare messages for AI
+  // With the cleaner regenerate approach, client sends the same user text (not empty)
+  // So we use messages as-is - no filtering needed
+  const messagesForAI = messages;
+  console.log('[Chat API] Messages for AI count:', messagesForAI.length);
+
+  // 4. Set conversation status to streaming
   setConversationStatus(conversationId, 'streaming');
 
   const openrouter = getOpenRouterClient();
 
-  // 6. Build provider options from preferences
+  // 5. Build provider options from preferences
   const providerOptions = providerPreferences ? {
     provider: {
       // If specific provider selected, put it first in order
@@ -228,7 +254,7 @@ export default defineEventHandler(async (event) => {
   const result = streamText({
     model: openrouter(selectedModel, providerOptions),
     system: SYSTEM_PROMPT,
-    messages: convertToModelMessages(messages),
+    messages: convertToModelMessages(messagesForAI),
     tools,
     stopWhen: stepCountIs(10), // Allow up to 10 tool steps for complex queries
 
@@ -262,6 +288,9 @@ export default defineEventHandler(async (event) => {
     // onFinish fires when stream completes (even if client disconnects)
     onFinish: async ({ responseMessage, isAborted }) => {
       console.log('[Chat API] Stream finished', { isAborted });
+      console.log('[Chat API] responseMessage:', JSON.stringify(responseMessage, null, 2)?.substring(0, 500));
+      console.log('[Chat API] responseMessage.id:', responseMessage?.id);
+      console.log('[Chat API] responseMessage.parts:', responseMessage?.parts?.length, 'parts');
 
       // Convert the responseMessage parts to our format and save
       if (responseMessage && responseMessage.parts) {
@@ -279,9 +308,12 @@ export default defineEventHandler(async (event) => {
           }
         }
 
+        // Generate ID if SDK doesn't provide one (SDK returns empty string)
+        const assistantMessageId = responseMessage.id || nanoid();
+
         // Create a mock response.messages array for saveAssistantMessages
         const mockMessages = [{
-          id: responseMessage.id,
+          id: assistantMessageId,
           role: 'assistant' as const,
           content: formattedParts.map(p => {
             if (p.type === 'text') {
@@ -305,10 +337,8 @@ export default defineEventHandler(async (event) => {
         saveAssistantMessages(conversationId, mockMessages, userMessageId);
 
         // Update the active leaf to point to this new assistant message
-        const assistantMessageId = responseMessage.id;
-        if (assistantMessageId) {
-          updateActiveLeaf(conversationId, assistantMessageId);
-        }
+        updateActiveLeaf(conversationId, assistantMessageId);
+        console.log('[Chat API] Updated active_leaf_id to:', assistantMessageId);
 
         // Also save any tool results
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

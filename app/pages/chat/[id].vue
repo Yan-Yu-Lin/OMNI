@@ -103,6 +103,11 @@ const conversationStatus = ref<ConversationStatus>('idle');
 // Draft mode: conversation doesn't exist in DB yet (lazy creation)
 const isDraftConversation = ref(false);
 
+// Pending body params for branching - these are read by the transport body function
+// This ensures trigger and parentId are always sent to the server
+const pendingParentId = ref<string | undefined>();
+const pendingTrigger = ref<'submit' | 'edit' | 'regenerate'>('submit');
+
 // Chat instance - will be recreated when conversation changes
 // Using shallowRef so we can track changes to the chat instance itself
 const chat = shallowRef<Chat<UIMessage> | null>(null);
@@ -131,14 +136,22 @@ const initializeChat = (initialMessages: UIMessage[]) => {
     chat.value.stop();
   }
 
-  // Create transport with conversationId, model, and provider preferences in the body
+  // Create transport with conversationId, model, provider preferences, and branching params
+  // pendingParentId and pendingTrigger are set before sendMessage calls
+  // NOTE: Use 'branchAction' instead of 'trigger' - SDK uses 'trigger' internally
   const transport = new DefaultChatTransport({
     api: '/api/chat',
-    body: () => ({
-      conversationId: conversationId.value,
-      model: selectedModelId.value,
-      providerPreferences: providerPreferences.value,
-    }),
+    body: () => {
+      const bodyData = {
+        conversationId: conversationId.value,
+        model: selectedModelId.value,
+        providerPreferences: providerPreferences.value,
+        parentId: pendingParentId.value,
+        branchAction: pendingTrigger.value,
+      };
+      console.log('[Transport] Sending body:', bodyData.branchAction, bodyData.parentId);
+      return bodyData;
+    },
   });
 
   // Create new Chat instance
@@ -293,11 +306,18 @@ const reloadAndRebuildTree = async () => {
     // Rebuild message tree from all messages
     const allMessages = conv.messages as unknown as BranchMessage[];
     const activeLeafId = (conv as { activeLeafId?: string | null }).activeLeafId ?? null;
+
+    console.log('[Chat] reloadAndRebuildTree - allMessages:', allMessages.length, 'activeLeafId:', activeLeafId);
+
     buildTree(allMessages, activeLeafId);
 
     // Get the active path; fall back to all messages if empty (e.g., activeLeafId not yet set)
     let newPath = getActivePath() as unknown as UIMessage[];
+
+    console.log('[Chat] reloadAndRebuildTree - getActivePath returned:', newPath.length, 'messages');
+
     if (!newPath || newPath.length === 0) {
+      console.warn('[Chat] reloadAndRebuildTree - path was empty, using fallback!');
       const convAny = conv as any;
       if (convAny.activePath && Array.isArray(convAny.activePath) && convAny.activePath.length > 0) {
         newPath = convAny.activePath as UIMessage[];
@@ -306,14 +326,21 @@ const reloadAndRebuildTree = async () => {
       }
     }
 
+    console.log('[Chat] reloadAndRebuildTree - final path:', newPath.map(m => `${m.role}:${m.id?.slice(0,8)}`));
+
     chatMessages.value = newPath;
 
     // Sync SDK state with new message path
+    // IMPORTANT: Must update BOTH the internal messagesRef AND the public state
+    // Otherwise the watcher on messagesRef will overwrite chatMessages
     if (chat.value) {
-      // Prefer the SDK setter when available to keep internal refs in sync
-      // Fallback to direct assignment for backward compatibility
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const anyChat = chat.value as any;
+      // Update the internal ref first (this is what the watcher observes)
+      if (anyChat?.state?.messagesRef) {
+        anyChat.state.messagesRef.value = newPath;
+      }
+      // Then update through official API
       if (typeof anyChat.setMessages === 'function') {
         anyChat.setMessages(newPath);
       } else {
@@ -341,19 +368,19 @@ const handleSend = async (text: string, parentId?: string) => {
   // Optimistically set to streaming
   conversationStatus.value = 'streaming';
 
-  try {
-    // Determine trigger type based on whether we have a parentId
-    const trigger = parentId ? 'edit' : 'submit';
+  // Set pending body params - these are read by the transport body function
+  pendingParentId.value = parentId;
+  pendingTrigger.value = parentId ? 'edit' : 'submit';
 
-    // Use the SDK's sendMessage method with body options for branching
-    // sendMessage(message, options) where options.body is passed to the transport
-    await chat.value.sendMessage(
-      { text },
-      { body: { parentId, trigger } }
-    );
+  try {
+    await chat.value.sendMessage({ text });
   } catch (err) {
     console.error('[Chat] Error sending message:', err);
     conversationStatus.value = 'error';
+  } finally {
+    // Reset pending params after request
+    pendingParentId.value = undefined;
+    pendingTrigger.value = 'submit';
   }
 };
 
@@ -428,76 +455,70 @@ const cancelEdit = () => {
 };
 
 // Handle regenerate - creates a sibling AI response
+// Simple approach: remove assistant, resend same user text, let SDK handle normally
 const handleRegenerate = async (message: UIMessage) => {
-  // Only regenerate assistant messages
   if (message.role !== 'assistant') return;
 
-  // Get the parent (user message before this assistant message)
+  // Get the parent user message
   const parentId = getParentForBranch(message.id);
   if (!parentId) {
     console.error('[Chat] Cannot regenerate: no parent message');
     return;
   }
 
+  // Find the parent user message
+  const parentIndex = chatMessages.value.findIndex(m => m.id === parentId);
+  if (parentIndex < 0) {
+    console.error('[Chat] Cannot find parent message');
+    return;
+  }
+
+  const parentMessage = chatMessages.value[parentIndex];
+
+  // Extract text from parent user message
+  const textPart = parentMessage.parts?.find((p: { type: string }) => p.type === 'text');
+  const parentText = (textPart as { type: 'text'; text: string })?.text || '';
+
+  if (!parentText) {
+    console.error('[Chat] Parent message has no text');
+    return;
+  }
+
+  console.log('[Chat] Regenerating - resending user text:', parentText.substring(0, 50));
+
+  // Set array to BEFORE the user message (remove both user and assistant)
+  const messagesBeforeUser = chatMessages.value.slice(0, parentIndex);
+
+  // Update SDK state
+  if (chat.value) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyChat = chat.value as any;
+    if (anyChat?.state?.messagesRef) {
+      anyChat.state.messagesRef.value = messagesBeforeUser as unknown as UIMessage[];
+    }
+    if (typeof anyChat.setMessages === 'function') {
+      anyChat.setMessages(messagesBeforeUser as unknown as UIMessage[]);
+    } else {
+      chat.value.messages = messagesBeforeUser;
+    }
+    chatMessages.value = messagesBeforeUser;
+  }
+
+  // Set pending params - server will save new assistant as sibling
+  pendingParentId.value = parentId;
+  pendingTrigger.value = 'regenerate';
+
+  conversationStatus.value = 'streaming';
+
   try {
-    console.log('[Chat] Regenerating response, parent:', parentId);
-
-    // Find the parent message (user message)
-    const parentIndex = chatMessages.value.findIndex(m => m.id === parentId);
-    if (parentIndex < 0) {
-      console.error('[Chat] Cannot find parent message');
-      return;
-    }
-
-    const parentMessage = chatMessages.value[parentIndex];
-    if (!parentMessage) {
-      console.error('[Chat] Parent message not found at index');
-      return;
-    }
-
-    // Extract text from parent user message (needed to send to API)
-    const textPart = parentMessage.parts?.find(p => p.type === 'text');
-    const parentText = (textPart as { type: 'text'; text: string })?.text || '';
-
-    // Truncate messages to NOT include the parent (we'll re-send it via sendMessage)
-    // This way the SDK properly sends the user message to the API
-    const messagesBeforeParent = chatMessages.value.slice(0, parentIndex);
-
-    // Update SDK state
-    if (chat.value) {
-      // Keep SDK internal refs aligned and prevent the old path from being resent
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const anyChat = chat.value as any;
-      if (anyChat?.state?.messagesRef) {
-        anyChat.state.messagesRef.value = messagesBeforeParent as unknown as UIMessage[];
-      }
-      if (typeof anyChat.setMessages === 'function') {
-        anyChat.setMessages(messagesBeforeParent as unknown as UIMessage[]);
-      } else {
-        chat.value.messages = messagesBeforeParent;
-      }
-      chatMessages.value = messagesBeforeParent;
-    }
-
-    // Set streaming state
-    conversationStatus.value = 'streaming';
-
-    // Re-send the parent user message with trigger='regenerate'
-    // The server will skip saving this user message and just generate a new response
-    // sendMessage(message, options) where options.body is passed to the transport
-    await chat.value?.sendMessage(
-      // Preserve the original user message ID to avoid minting a duplicate client-side ID
-      { id: parentId, text: parentText } as any,
-      {
-        body: {
-          parentId, // This is the user message ID - new assistant will be its sibling
-          trigger: 'regenerate',
-        },
-      }
-    );
+    // Resend the same user text - SDK handles it normally
+    await chat.value?.sendMessage({ text: parentText });
   } catch (err) {
     console.error('[Chat] Error regenerating:', err);
     conversationStatus.value = 'error';
+  } finally {
+    pendingParentId.value = undefined;
+    pendingTrigger.value = 'submit';
   }
 };
 
