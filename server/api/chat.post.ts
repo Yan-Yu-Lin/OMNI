@@ -13,6 +13,7 @@ import {
   saveToolResults,
   setConversationStatus,
   autoGenerateTitle,
+  updateActiveLeaf,
 } from '../utils/chat-persistence';
 import db from '../db';
 import { defaultSettings, type ProviderPreferences } from '~/types';
@@ -63,6 +64,8 @@ interface ChatRequestBody {
   conversationId: string;
   model?: string;
   providerPreferences?: ProviderPreferences;
+  parentId?: string; // Parent message ID for branching support
+  trigger?: 'submit' | 'edit' | 'regenerate'; // What triggered this request
 }
 
 const SYSTEM_PROMPT = `You are a helpful assistant with access to web tools and a sandbox environment.
@@ -97,7 +100,7 @@ Always explain what you're doing and show relevant output to the user.`;
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<ChatRequestBody>(event);
-  const { messages, conversationId, model, providerPreferences } = body;
+  const { messages, conversationId, model, providerPreferences, parentId, trigger } = body;
 
   // Debug: Log what we received
   console.log('[Chat API] Received request for conversation:', conversationId);
@@ -132,9 +135,11 @@ export default defineEventHandler(async (event) => {
   // 1. Ensure conversation exists (creates if needed for lazy creation)
   const isNewConversation = ensureConversationExists(conversationId, selectedModel, providerPreferences);
   console.log('[Chat API] Conversation exists:', !isNewConversation, 'isNew:', isNewConversation);
+  console.log('[Chat API] Trigger:', trigger, 'ParentId:', parentId);
 
-  // 2. Save the user message to DB
-  saveUserMessage(conversationId, userMessage);
+  // 2. Save the user message to DB with optional parentId for branching
+  const userMessageId = userMessage.id;
+  saveUserMessage(conversationId, userMessage, parentId);
 
   // 2.5 Update lastUsed ONLY for new conversations (first message)
   // This is the single source of truth for what new conversations should default to
@@ -273,7 +278,14 @@ export default defineEventHandler(async (event) => {
           }),
         }];
 
-        saveAssistantMessages(conversationId, mockMessages);
+        // Save assistant message with user message as parent for branching
+        saveAssistantMessages(conversationId, mockMessages, userMessageId);
+
+        // Update the active leaf to point to this new assistant message
+        const assistantMessageId = responseMessage.id;
+        if (assistantMessageId) {
+          updateActiveLeaf(conversationId, assistantMessageId);
+        }
 
         // Also save any tool results
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

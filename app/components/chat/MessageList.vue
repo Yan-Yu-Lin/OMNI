@@ -10,6 +10,10 @@
           :key="message.id"
           :message="message"
           :is-streaming="isStreaming && isLastAssistantMessage(index)"
+          :sibling-info="getSiblingInfo?.(message.id) ?? null"
+          @edit="$emit('edit', $event)"
+          @regenerate="$emit('regenerate', $event)"
+          @switch-branch="$emit('switch-branch', $event)"
         />
 
         <div v-if="isStreaming && showPendingIndicator" class="streaming-indicator">
@@ -27,14 +31,19 @@
 
 <script setup lang="ts">
 import type { UIMessage } from 'ai';
+import type { SiblingInfo } from '~/types';
 
 const props = defineProps<{
   messages: UIMessage[];
   isStreaming?: boolean;
+  getSiblingInfo?: (messageId: string) => SiblingInfo | null;
 }>();
 
 defineEmits<{
   'suggestion-click': [suggestion: string];
+  'edit': [message: UIMessage];
+  'regenerate': [message: UIMessage];
+  'switch-branch': [messageId: string];
 }>();
 
 const containerRef = ref<HTMLElement>();

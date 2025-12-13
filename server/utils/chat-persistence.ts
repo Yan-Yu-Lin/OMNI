@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import type { UIMessage } from 'ai';
 import db from '../db';
-import type { ConversationStatus } from '../db/schema';
+import type { ConversationStatus, MessageRecord } from '../db/schema';
 
 // Type for assistant content part from model messages
 interface AssistantContentPart {
@@ -28,16 +28,27 @@ interface ResponseMessage {
 
 /**
  * Save a user message to the database
+ * @param parentId - Optional parent message ID for branching support
  */
-export function saveUserMessage(conversationId: string, message: UIMessage) {
+export function saveUserMessage(
+  conversationId: string,
+  message: UIMessage,
+  parentId?: string
+) {
   const { id, role, ...rest } = message;
 
   const insert = db.prepare(`
-    INSERT INTO messages (id, conversation_id, role, content)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO messages (id, conversation_id, role, content, parent_id)
+    VALUES (?, ?, ?, ?, ?)
   `);
 
-  insert.run(id || nanoid(), conversationId, role, JSON.stringify(rest));
+  insert.run(
+    id || nanoid(),
+    conversationId,
+    role,
+    JSON.stringify(rest),
+    parentId ?? null
+  );
 
   // Update conversation timestamp
   db.prepare(`
@@ -51,10 +62,12 @@ export function saveUserMessage(conversationId: string, message: UIMessage) {
  * Convert model messages to UIMessages and save them to the database
  * This is called from onStepFinish and onFinish callbacks
  * Consolidates ALL assistant message parts into a single message to avoid splitting
+ * @param parentId - Optional parent message ID for branching support
  */
 export function saveAssistantMessages(
   conversationId: string,
-  modelMessages: ResponseMessage[]
+  modelMessages: ResponseMessage[],
+  parentId?: string
 ) {
   // Filter for only assistant messages
   const assistantMessages = modelMessages.filter((m) => m.role === 'assistant');
@@ -93,13 +106,13 @@ export function saveAssistantMessages(
 
   // UPSERT the single consolidated message
   const upsert = db.prepare(`
-    INSERT INTO messages (id, conversation_id, role, content)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO messages (id, conversation_id, role, content, parent_id)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       content = excluded.content,
       updated_at = CURRENT_TIMESTAMP
   `);
-  upsert.run(messageId, conversationId, 'assistant', content);
+  upsert.run(messageId, conversationId, 'assistant', content, parentId ?? null);
 
   // Delete any other assistant messages from this response (cleanup duplicates)
   // Only delete messages created after the last user message
@@ -226,4 +239,121 @@ export function autoGenerateTitle(conversationId: string, userMessage: UIMessage
       `).run(title, conversationId);
     }
   }
+}
+
+/**
+ * Update conversation's active leaf pointer
+ * Called after saving messages to track the current branch endpoint
+ */
+export function updateActiveLeaf(conversationId: string, leafId: string): void {
+  db.prepare(`
+    UPDATE conversations
+    SET active_leaf_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(leafId, conversationId);
+}
+
+/**
+ * Get siblings of a message (messages with the same parent_id)
+ * Returns the sibling messages and the index of the current message
+ */
+export function getSiblings(
+  messageId: string
+): { messages: MessageRecord[]; currentIndex: number } {
+  // First get the message to find its parent_id
+  const message = db
+    .prepare(`SELECT parent_id FROM messages WHERE id = ?`)
+    .get(messageId) as { parent_id: string | null } | undefined;
+
+  if (!message) {
+    return { messages: [], currentIndex: -1 };
+  }
+
+  // Find all messages with the same parent_id
+  let siblings: MessageRecord[];
+  if (message.parent_id === null) {
+    // Root messages - those with no parent
+    siblings = db
+      .prepare(
+        `
+        SELECT * FROM messages
+        WHERE parent_id IS NULL
+          AND conversation_id = (SELECT conversation_id FROM messages WHERE id = ?)
+        ORDER BY created_at ASC
+      `
+      )
+      .all(messageId) as MessageRecord[];
+  } else {
+    siblings = db
+      .prepare(
+        `
+        SELECT * FROM messages
+        WHERE parent_id = ?
+        ORDER BY created_at ASC
+      `
+      )
+      .all(message.parent_id) as MessageRecord[];
+  }
+
+  const currentIndex = siblings.findIndex((m) => m.id === messageId);
+
+  return { messages: siblings, currentIndex };
+}
+
+/**
+ * Build active path from root to active_leaf_id
+ * Returns messages in order from root to leaf along the active branch
+ */
+export function getActivePath(conversationId: string): MessageRecord[] {
+  // Get the conversation's active leaf
+  const conv = db
+    .prepare(`SELECT active_leaf_id FROM conversations WHERE id = ?`)
+    .get(conversationId) as { active_leaf_id: string | null } | undefined;
+
+  if (!conv || !conv.active_leaf_id) {
+    // No active leaf - return empty path or fall back to linear order
+    // For backwards compatibility, return all messages in created_at order
+    return db
+      .prepare(
+        `
+        SELECT * FROM messages
+        WHERE conversation_id = ?
+        ORDER BY created_at ASC
+      `
+      )
+      .all(conversationId) as MessageRecord[];
+  }
+
+  // Build path by walking up from leaf to root
+  const path: MessageRecord[] = [];
+  let currentId: string | null = conv.active_leaf_id;
+
+  while (currentId) {
+    const message = db
+      .prepare(`SELECT * FROM messages WHERE id = ?`)
+      .get(currentId) as MessageRecord | undefined;
+
+    if (!message) break;
+
+    path.unshift(message); // Add to beginning to maintain root-to-leaf order
+    currentId = message.parent_id;
+  }
+
+  return path;
+}
+
+/**
+ * Get all messages for a conversation (for tree building on client)
+ * Includes parent_id for constructing the full tree structure
+ */
+export function getAllMessages(conversationId: string): MessageRecord[] {
+  return db
+    .prepare(
+      `
+      SELECT * FROM messages
+      WHERE conversation_id = ?
+      ORDER BY created_at ASC
+    `
+    )
+    .all(conversationId) as MessageRecord[];
 }

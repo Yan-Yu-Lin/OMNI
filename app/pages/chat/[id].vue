@@ -1,26 +1,60 @@
 <template>
-  <div v-if="loadingChat" class="loading-chat">
-    Loading conversation...
-  </div>
+  <div class="chat-page">
+    <div v-if="loadingChat" class="loading-chat">
+      Loading conversation...
+    </div>
 
-  <ChatContainer
-    v-else
-    :messages="chatMessages"
-    :is-streaming="isStreaming"
-    :models="models"
-    :selected-model="selectedModelId"
-    :provider-preferences="providerPreferences"
-    @send="handleSend"
-    @update:selected-model="selectedModelId = $event"
-    @update:provider-preferences="providerPreferences = $event"
-    @model-selected="handleModelSelected"
-  />
+    <ChatContainer
+      v-else
+      :messages="chatMessages"
+      :is-streaming="isStreaming"
+      :models="models"
+      :selected-model="selectedModelId"
+      :provider-preferences="providerPreferences"
+      :get-sibling-info="getSiblingInfo"
+      @send="handleSend"
+      @update:selected-model="selectedModelId = $event"
+      @update:provider-preferences="providerPreferences = $event"
+      @model-selected="handleModelSelected"
+      @edit="handleEdit"
+      @regenerate="handleRegenerate"
+      @switch-branch="handleSwitchBranch"
+    />
+
+    <!-- Edit Message Modal -->
+    <Teleport to="body">
+      <div v-if="editingMessage" class="edit-modal-overlay" @click.self="cancelEdit">
+        <div class="edit-modal">
+          <h3 class="edit-modal-title">Edit Message</h3>
+          <textarea
+            v-model="editText"
+            class="edit-textarea"
+            rows="6"
+            placeholder="Edit your message..."
+            @keydown.meta.enter="submitEdit"
+            @keydown.ctrl.enter="submitEdit"
+          />
+          <div class="edit-actions">
+            <button class="edit-btn cancel" @click="cancelEdit">Cancel</button>
+            <button
+              class="edit-btn primary"
+              :disabled="!editText.trim()"
+              @click="submitEdit"
+            >
+              Save & Send
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import type { ConversationStatus, ProviderPreferences } from '~/types';
+import type { ConversationStatus, ProviderPreferences, BranchMessage } from '~/types';
+import { useMessageTree } from '~/composables/useMessageTree';
 
 const route = useRoute();
 const router = useRouter();
@@ -46,6 +80,9 @@ function providerStringToPrefs(providerStr: string): ProviderPreferences {
 
 // Providers composable
 const { markModelSeen } = useProviders();
+
+// Message tree composable for branching support
+const { buildTree, getActivePath, getSiblingInfo, switchToBranch, getParentForBranch } = useMessageTree();
 
 // Selected model - initialized from lastUsed (will be updated when conversation loads)
 const selectedModelId = ref(lastUsed.value.model);
@@ -173,7 +210,17 @@ const loadConversation = async () => {
       providerPreferences.value = getModelProviderPrefs(selectedModelId.value);
     }
 
-    initializeChat(conv.messages);
+    // Build message tree for branching support
+    // conv.messages contains all messages with parentId, conv.activeLeafId is the current branch
+    const allMessages = conv.messages as BranchMessage[];
+    const activeLeafId = (conv as { activeLeafId?: string | null }).activeLeafId ?? null;
+    buildTree(allMessages, activeLeafId);
+
+    // Use activePath for initial display (or fallback to all messages for old conversations)
+    const activePath = (conv as { activePath?: BranchMessage[] }).activePath;
+    const initialMessages = activePath && activePath.length > 0 ? activePath : conv.messages;
+
+    initializeChat(initialMessages);
 
     // If conversation was streaming when we loaded, try to resume
     if (conv.status === 'streaming' && chat.value) {
@@ -196,6 +243,8 @@ const loadConversation = async () => {
     selectedModelId.value = lastUsed.value.model;
     providerPreferences.value = providerStringToPrefs(lastUsed.value.provider);
 
+    // Initialize with empty tree
+    buildTree([], null);
     initializeChat([]);
   }
 
@@ -207,8 +256,17 @@ const refreshFromDB = async () => {
   try {
     const conv = await getConversation(conversationId.value);
     if (conv) {
+      // Rebuild message tree
+      const allMessages = conv.messages as BranchMessage[];
+      const activeLeafId = (conv as { activeLeafId?: string | null }).activeLeafId ?? null;
+      buildTree(allMessages, activeLeafId);
+
+      // Use activePath for display
+      const activePath = (conv as { activePath?: BranchMessage[] }).activePath;
+      const displayMessages = activePath && activePath.length > 0 ? activePath : conv.messages;
+
       // Re-initialize chat with latest messages
-      initializeChat(conv.messages);
+      initializeChat(displayMessages);
       conversationStatus.value = conv.status;
 
       if (conv.status !== 'streaming') {
@@ -221,8 +279,8 @@ const refreshFromDB = async () => {
   }
 };
 
-// Send a message
-const handleSend = async (text: string) => {
+// Send a message (with optional parentId for branching)
+const handleSend = async (text: string, parentId?: string) => {
   // Check if already streaming
   if (chatStatus.value === 'streaming' || chatStatus.value === 'submitted') {
     console.warn('[Chat] Already streaming, ignoring send request');
@@ -238,10 +296,142 @@ const handleSend = async (text: string) => {
   conversationStatus.value = 'streaming';
 
   try {
-    // Use the SDK's sendMessage method - it handles everything
-    await chat.value.sendMessage({ text });
+    // Determine trigger type based on whether we have a parentId
+    const trigger = parentId ? 'edit' : 'submit';
+
+    // Use the SDK's sendMessage method with body options for branching
+    await chat.value.sendMessage({
+      text,
+      body: { parentId, trigger },
+    });
   } catch (err) {
     console.error('[Chat] Error sending message:', err);
+    conversationStatus.value = 'error';
+  }
+};
+
+// ============================================================================
+// BRANCHING HANDLERS
+// ============================================================================
+
+// Edit modal state
+const editingMessage = ref<UIMessage | null>(null);
+const editText = ref('');
+
+// Handle switching to a different branch
+const handleSwitchBranch = async (messageId: string) => {
+  try {
+    console.log('[Chat] Switching to branch:', messageId);
+
+    // Call API to update active_leaf_id in database
+    await switchToBranch(conversationId.value, messageId);
+
+    // Rebuild the active path from the tree
+    const newPath = getActivePath();
+    chatMessages.value = newPath;
+
+    // Sync SDK state with new message path
+    if (chat.value) {
+      chat.value.setMessages(newPath);
+    }
+  } catch (err) {
+    console.error('[Chat] Error switching branch:', err);
+  }
+};
+
+// Handle edit button click - opens modal
+const handleEdit = (message: UIMessage) => {
+  editingMessage.value = message;
+
+  // Extract text content from message parts
+  const textPart = message.parts?.find(p => p.type === 'text');
+  editText.value = (textPart as { type: 'text'; text: string })?.text || '';
+};
+
+// Submit edited message - creates a new branch
+const submitEdit = async () => {
+  if (!editingMessage.value || !editText.value.trim()) return;
+
+  // Store values before clearing
+  const messageToEdit = editingMessage.value;
+  const newText = editText.value.trim();
+
+  // Get the parent of the message being edited (to create sibling)
+  const parentId = getParentForBranch(messageToEdit.id);
+
+  // Close modal
+  editingMessage.value = null;
+  editText.value = '';
+
+  // If editing a message, we need to truncate the chat to the parent
+  // so the new message becomes a sibling of the original
+  if (parentId && chat.value) {
+    // Get messages up to (but not including) the edited message
+    const currentMessages = chatMessages.value;
+    const editedIndex = currentMessages.findIndex(m => m.id === messageToEdit.id);
+    if (editedIndex > 0) {
+      const truncatedMessages = currentMessages.slice(0, editedIndex);
+      chat.value.setMessages(truncatedMessages);
+      chatMessages.value = truncatedMessages;
+    }
+  }
+
+  // Send new message with parentId (creates branch)
+  await handleSend(newText, parentId ?? undefined);
+};
+
+// Cancel edit - close modal
+const cancelEdit = () => {
+  editingMessage.value = null;
+  editText.value = '';
+};
+
+// Handle regenerate - creates a sibling AI response
+const handleRegenerate = async (message: UIMessage) => {
+  // Only regenerate assistant messages
+  if (message.role !== 'assistant') return;
+
+  // Get the parent (user message before this assistant message)
+  const parentId = getParentForBranch(message.id);
+  if (!parentId) {
+    console.error('[Chat] Cannot regenerate: no parent message');
+    return;
+  }
+
+  try {
+    console.log('[Chat] Regenerating response, parent:', parentId);
+
+    // Find the parent message (user message)
+    const parentIndex = chatMessages.value.findIndex(m => m.id === parentId);
+    if (parentIndex < 0) {
+      console.error('[Chat] Cannot find parent message');
+      return;
+    }
+
+    // Truncate messages to include only up to the parent (user message)
+    const messagesUpToParent = chatMessages.value.slice(0, parentIndex + 1);
+
+    // Update SDK state
+    if (chat.value) {
+      chat.value.setMessages(messagesUpToParent);
+      chatMessages.value = messagesUpToParent;
+    }
+
+    // Set streaming state
+    conversationStatus.value = 'streaming';
+
+    // Trigger a new AI response by calling the API directly
+    // We need to send the messages up to and including the parent,
+    // with trigger='regenerate' to indicate this is a regeneration
+    await chat.value?.sendMessage({
+      text: '', // Empty - we're not adding a new user message
+      body: {
+        parentId,
+        trigger: 'regenerate',
+      },
+    });
+  } catch (err) {
+    console.error('[Chat] Error regenerating:', err);
     conversationStatus.value = 'error';
   }
 };
@@ -301,11 +491,125 @@ watch(conversationId, () => {
 </script>
 
 <style scoped>
+.chat-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 .loading-chat {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
   color: #666;
+}
+
+/* Edit Modal Styles */
+.edit-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.edit-modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 600px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: modal-appear 0.2s ease-out;
+}
+
+@keyframes modal-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.edit-modal-title {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #171717;
+}
+
+.edit-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #171717;
+  resize: vertical;
+  min-height: 120px;
+  transition: border-color 0.2s;
+}
+
+.edit-textarea:focus {
+  outline: none;
+  border-color: #171717;
+}
+
+.edit-textarea::placeholder {
+  color: #a0a0a0;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.edit-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.edit-btn.cancel {
+  background: transparent;
+  border: 1px solid #e0e0e0;
+  color: #666;
+}
+
+.edit-btn.cancel:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.edit-btn.primary {
+  background: #171717;
+  border: 1px solid #171717;
+  color: #fff;
+}
+
+.edit-btn.primary:hover:not(:disabled) {
+  background: #333;
+}
+
+.edit-btn.primary:disabled {
+  background: #e0e0e0;
+  border-color: #e0e0e0;
+  color: #a0a0a0;
+  cursor: not-allowed;
 }
 </style>

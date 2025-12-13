@@ -151,4 +151,61 @@ try {
   console.error('[DB Migration] Error creating lastUsed:', e);
 }
 
+// Migration: Add parent_id to messages for branching support
+try {
+  const messagesInfo = db.prepare("PRAGMA table_info(messages)").all() as { name: string }[];
+  const hasParentId = messagesInfo.some(col => col.name === 'parent_id');
+
+  if (!hasParentId) {
+    db.exec("ALTER TABLE messages ADD COLUMN parent_id TEXT REFERENCES messages(id)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_messages_parent_id ON messages(parent_id)");
+    console.log('[DB Migration] Added parent_id column to messages table');
+
+    // Migrate existing messages: set parent_id to previous message in each conversation
+    const conversations = db.prepare("SELECT id FROM conversations").all() as { id: string }[];
+    for (const conv of conversations) {
+      const messages = db.prepare(
+        "SELECT id FROM messages WHERE conversation_id = ? ORDER BY created_at ASC"
+      ).all(conv.id) as { id: string }[];
+
+      let previousId: string | null = null;
+      for (const msg of messages) {
+        if (previousId !== null) {
+          db.prepare("UPDATE messages SET parent_id = ? WHERE id = ?").run(previousId, msg.id);
+        }
+        previousId = msg.id;
+      }
+    }
+    console.log('[DB Migration] Migrated existing messages with parent_id chain');
+  }
+} catch (e) {
+  console.error('[DB Migration] Error adding parent_id column:', e);
+}
+
+// Migration: Add active_leaf_id to conversations for branching support
+try {
+  const conversationsInfo = db.prepare("PRAGMA table_info(conversations)").all() as { name: string }[];
+  const hasActiveLeafId = conversationsInfo.some(col => col.name === 'active_leaf_id');
+
+  if (!hasActiveLeafId) {
+    db.exec("ALTER TABLE conversations ADD COLUMN active_leaf_id TEXT REFERENCES messages(id)");
+    console.log('[DB Migration] Added active_leaf_id column to conversations table');
+
+    // Set active_leaf_id to the last message of each conversation
+    const conversations = db.prepare("SELECT id FROM conversations").all() as { id: string }[];
+    for (const conv of conversations) {
+      const lastMessage = db.prepare(
+        "SELECT id FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1"
+      ).get(conv.id) as { id: string } | undefined;
+
+      if (lastMessage) {
+        db.prepare("UPDATE conversations SET active_leaf_id = ? WHERE id = ?").run(lastMessage.id, conv.id);
+      }
+    }
+    console.log('[DB Migration] Set active_leaf_id for existing conversations');
+  }
+} catch (e) {
+  console.error('[DB Migration] Error adding active_leaf_id column:', e);
+}
+
 export default db;

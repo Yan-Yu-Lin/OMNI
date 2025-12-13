@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversation Branching Visualization</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 40px;
+      line-height: 1.6;
+    }
+    h1 { margin-bottom: 8px; }
+    .subtitle { color: #666; margin-bottom: 32px; }
+
+    .container {
+      display: flex;
+      gap: 48px;
+      flex-wrap: wrap;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      flex: 1;
+      min-width: 400px;
+    }
+
+    h2 { margin-bottom: 16px; font-size: 18px; }
+    h3 { margin: 24px 0 12px; font-size: 14px; color: #666; }
+
+    /* Tree visualization */
+    .tree {
+      padding-left: 20px;
+    }
+
+    .node {
+      position: relative;
+      padding: 8px 12px;
+      margin: 8px 0;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    .node.user {
+      background: #e3f2fd;
+      border-left: 3px solid #2196f3;
+    }
+
+    .node.assistant {
+      background: #f3e5f5;
+      border-left: 3px solid #9c27b0;
+    }
+
+    .node.active {
+      box-shadow: 0 0 0 2px #4caf50;
+    }
+
+    .node-id {
+      font-family: monospace;
+      font-size: 10px;
+      color: #999;
+    }
+
+    .children {
+      margin-left: 24px;
+      border-left: 2px dashed #ddd;
+      padding-left: 16px;
+    }
+
+    .sibling-group {
+      background: #fff9c4;
+      border-radius: 8px;
+      padding: 8px;
+      margin: 8px 0;
+    }
+
+    .sibling-label {
+      font-size: 10px;
+      color: #f57c00;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    /* Database table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+
+    th, td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+
+    th {
+      background: #f5f5f5;
+      font-weight: 600;
+    }
+
+    .highlight { background: #e8f5e9; }
+
+    /* Navigation UI mockup */
+    .nav-mockup {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      background: #fafafa;
+      border-radius: 8px;
+      margin-top: 16px;
+    }
+
+    .nav-btn {
+      width: 24px;
+      height: 24px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .nav-count {
+      font-size: 12px;
+      color: #666;
+    }
+
+    code {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .note {
+      background: #fff3e0;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Conversation Branching</h1>
+  <p class="subtitle">Simple tree structure using only <code>parent_id</code></p>
+
+  <div class="container">
+    <!-- Visual Tree -->
+    <div class="section">
+      <h2>Visual Tree Structure</h2>
+      <p style="font-size: 13px; color: #666; margin-bottom: 16px;">
+        Green outline = active path (what AI sees)
+      </p>
+
+      <div class="tree">
+        <div class="node user active">
+          <div class="node-id">msg_1</div>
+          👤 "Hello, how are you?"
+        </div>
+
+        <div class="children">
+          <div class="sibling-group">
+            <div class="sibling-label">⚡ SIBLINGS (regenerate created msg_5)</div>
+
+            <div class="node assistant active">
+              <div class="node-id">msg_2 (parent: msg_1)</div>
+              🤖 "I'm doing great! How can I help?"
+            </div>
+
+            <div class="children">
+              <div class="node user active">
+                <div class="node-id">msg_3 (parent: msg_2)</div>
+                👤 "Tell me about Vue.js"
+              </div>
+
+              <div class="children">
+                <div class="node assistant active">
+                  <div class="node-id">msg_4 (parent: msg_3)</div>
+                  🤖 "Vue.js is a progressive framework..."
+                </div>
+              </div>
+            </div>
+
+            <div class="node assistant" style="opacity: 0.6;">
+              <div class="node-id">msg_5 (parent: msg_1) ← sibling of msg_2</div>
+              🤖 "Hey! I'm here to help!"
+            </div>
+
+            <div class="children" style="opacity: 0.6;">
+              <div class="node user">
+                <div class="node-id">msg_6 (parent: msg_5)</div>
+                👤 "Tell me about React"
+              </div>
+              <div class="children">
+                <div class="node assistant">
+                  <div class="node-id">msg_7 (parent: msg_6)</div>
+                  🤖 "React is a library for building UIs..."
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Navigation UI (on msg_2)</h3>
+      <div class="nav-mockup">
+        <button class="nav-btn">‹</button>
+        <span class="nav-count">1 / 2</span>
+        <button class="nav-btn">›</button>
+        <span style="font-size: 12px; color: #999; margin-left: 8px;">
+          ← Click to switch between msg_2 and msg_5
+        </span>
+      </div>
+    </div>
+
+    <!-- Database Schema -->
+    <div class="section">
+      <h2>Database: Just Add <code>parent_id</code></h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>id</th>
+            <th>parent_id</th>
+            <th>role</th>
+            <th>content</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="highlight">
+            <td>msg_1</td>
+            <td><em>null</em></td>
+            <td>user</td>
+            <td>"Hello, how are you?"</td>
+          </tr>
+          <tr class="highlight">
+            <td>msg_2</td>
+            <td>msg_1</td>
+            <td>assistant</td>
+            <td>"I'm doing great!..."</td>
+          </tr>
+          <tr class="highlight">
+            <td>msg_3</td>
+            <td>msg_2</td>
+            <td>user</td>
+            <td>"Tell me about Vue.js"</td>
+          </tr>
+          <tr class="highlight">
+            <td>msg_4</td>
+            <td>msg_3</td>
+            <td>assistant</td>
+            <td>"Vue.js is..."</td>
+          </tr>
+          <tr>
+            <td>msg_5</td>
+            <td>msg_1</td>
+            <td>assistant</td>
+            <td>"Hey! I'm here..."</td>
+          </tr>
+          <tr>
+            <td>msg_6</td>
+            <td>msg_5</td>
+            <td>user</td>
+            <td>"Tell me about React"</td>
+          </tr>
+          <tr>
+            <td>msg_7</td>
+            <td>msg_6</td>
+            <td>assistant</td>
+            <td>"React is..."</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Key Insight</h3>
+      <div class="note">
+        <strong>Siblings</strong> = messages with the same <code>parent_id</code><br><br>
+        msg_2 and msg_5 are siblings (both have parent_id = msg_1)<br><br>
+        <strong>To find siblings:</strong><br>
+        <code>SELECT * FROM messages WHERE parent_id = 'msg_1'</code>
+      </div>
+
+      <h3>Active Path (what AI sees)</h3>
+      <div class="note">
+        Walk up from current message following parent_id:<br><br>
+        <code>msg_4 → msg_3 → msg_2 → msg_1</code><br><br>
+        This is the only history the AI receives.
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top: 32px; max-width: 100%;">
+    <h2>Implementation Complexity</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Difficulty</th>
+          <th>What's Needed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Database</td>
+          <td>🟢 Easy</td>
+          <td>Add <code>parent_id</code> column to messages table</td>
+        </tr>
+        <tr>
+          <td>API - Save</td>
+          <td>🟢 Easy</td>
+          <td>Include parent_id when creating message</td>
+        </tr>
+        <tr>
+          <td>API - Load</td>
+          <td>🟡 Medium</td>
+          <td>Build tree from flat list, track active path</td>
+        </tr>
+        <tr>
+          <td>UI - Navigation</td>
+          <td>🟡 Medium</td>
+          <td>Show ‹ 1/2 › when siblings exist</td>
+        </tr>
+        <tr>
+          <td>AI Context</td>
+          <td>🟢 Easy</td>
+          <td>Only send active path to AI</td>
+        </tr>
+        <tr>
+          <td>State Management</td>
+          <td>🟡 Medium</td>
+          <td>Track which branch is "active" per conversation</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

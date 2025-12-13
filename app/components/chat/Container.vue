@@ -3,7 +3,11 @@
     <ChatMessageList
       :messages="messages"
       :is-streaming="isStreaming"
+      :get-sibling-info="getSiblingInfo"
       @suggestion-click="handleSuggestionClick"
+      @edit="$emit('edit', $event)"
+      @regenerate="$emit('regenerate', $event)"
+      @switch-branch="$emit('switch-branch', $event)"
     />
 
     <!-- Unified input container -->
@@ -64,7 +68,7 @@
 
 <script setup lang="ts">
 import type { UIMessage } from 'ai';
-import type { Model, ProviderPreferences } from '~/types';
+import type { Model, ProviderPreferences, SiblingInfo } from '~/types';
 
 const props = withDefaults(defineProps<{
   messages: UIMessage[];
@@ -72,6 +76,7 @@ const props = withDefaults(defineProps<{
   models?: Model[];
   selectedModel?: string;
   providerPreferences?: ProviderPreferences;
+  getSiblingInfo?: (messageId: string) => SiblingInfo | null;
 }>(), {
   isStreaming: false,
   models: () => [],
@@ -83,6 +88,9 @@ const emit = defineEmits<{
   'update:selectedModel': [modelId: string];
   'update:providerPreferences': [prefs: ProviderPreferences];
   'model-selected': [modelId: string, modelName: string];
+  'edit': [message: UIMessage];
+  'regenerate': [message: UIMessage];
+  'switch-branch': [messageId: string];
 }>();
 
 // Input state

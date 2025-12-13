@@ -194,6 +194,10 @@
 
       <!-- Hover toolbar -->
       <div v-if="!isStreaming" class="message-toolbar">
+        <ChatBranchNavigation
+          :sibling-info="siblingInfo"
+          @switch-branch="$emit('switch-branch', $event)"
+        />
         <span v-if="message.createdAt" class="toolbar-timestamp">
           {{ formatTime(message.createdAt) }}
         </span>
@@ -224,15 +228,18 @@
 
 <script setup lang="ts">
 import type { UIMessage } from 'ai';
+import type { SiblingInfo } from '~/types';
 
 const props = defineProps<{
   message: UIMessage;
   isStreaming?: boolean;
+  siblingInfo?: SiblingInfo | null;
 }>();
 
 const emit = defineEmits<{
   edit: [message: UIMessage];
   regenerate: [message: UIMessage];
+  'switch-branch': [messageId: string];
 }>();
 
 // Format timestamp for display

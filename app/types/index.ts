@@ -431,6 +431,29 @@ export interface ProviderInfo {
 }
 
 // =============================================================================
+// BRANCHING TYPES
+// =============================================================================
+
+/**
+ * Message with parent reference for branching support
+ */
+export interface BranchMessage extends import('ai').UIMessage {
+  parentId: string | null;
+}
+
+/**
+ * Sibling navigation info for branch UI
+ */
+export interface SiblingInfo {
+  /** Total number of siblings (including current) */
+  total: number;
+  /** 1-indexed position of current message among siblings */
+  currentIndex: number;
+  /** IDs of all sibling messages in order */
+  siblingIds: string[];
+}
+
+// =============================================================================
 // PROVIDER SELECTION TYPES
 // =============================================================================
 
