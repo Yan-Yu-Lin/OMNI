@@ -352,8 +352,8 @@ const reloadAndRebuildTree = async () => {
   }
 };
 
-// Send a message (with optional parentId for branching)
-const handleSend = async (text: string, parentId?: string) => {
+// Send a message (with optional parentId and explicit action for branching)
+const handleSend = async (text: string, parentId?: string, action?: 'submit' | 'edit' | 'regenerate') => {
   // Check if already streaming
   if (chatStatus.value === 'streaming' || chatStatus.value === 'submitted') {
     console.warn('[Chat] Already streaming, ignoring send request');
@@ -370,7 +370,8 @@ const handleSend = async (text: string, parentId?: string) => {
 
   // Set pending body params - these are read by the transport body function
   pendingParentId.value = parentId;
-  pendingTrigger.value = parentId ? 'edit' : 'submit';
+  // Use explicit action if provided, otherwise infer from parentId
+  pendingTrigger.value = action ?? 'submit';
 
   try {
     await chat.value.sendMessage({ text });
@@ -431,21 +432,33 @@ const submitEdit = async () => {
   editingMessage.value = null;
   editText.value = '';
 
-  // If editing a message, we need to truncate the chat to the parent
+  // Truncate the chat to before the edited message
   // so the new message becomes a sibling of the original
-  if (parentId && chat.value) {
-    // Get messages up to (but not including) the edited message
+  if (chat.value) {
     const currentMessages = chatMessages.value;
     const editedIndex = currentMessages.findIndex(m => m.id === messageToEdit.id);
-    if (editedIndex > 0) {
-      const truncatedMessages = currentMessages.slice(0, editedIndex);
-      chat.value.messages = truncatedMessages;
-      chatMessages.value = truncatedMessages;
+
+    // For first message (index 0), truncate to empty array
+    // For other messages, truncate to before the edited message
+    const truncatedMessages = editedIndex >= 0 ? currentMessages.slice(0, editedIndex) : currentMessages;
+
+    // Update SDK state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyChat = chat.value as any;
+    if (anyChat?.state?.messagesRef) {
+      anyChat.state.messagesRef.value = truncatedMessages;
     }
+    if (typeof anyChat.setMessages === 'function') {
+      anyChat.setMessages(truncatedMessages);
+    } else {
+      chat.value.messages = truncatedMessages;
+    }
+    chatMessages.value = truncatedMessages;
   }
 
   // Send new message with parentId (creates branch)
-  await handleSend(newText, parentId ?? undefined);
+  // Pass 'edit' explicitly since parentId could be null for root messages
+  await handleSend(newText, parentId ?? undefined, 'edit');
 };
 
 // Cancel edit - close modal
