@@ -1,4 +1,16 @@
-/* CSS Variables (Theme Foundation) */
+# Task 01: CSS Variables Foundation
+
+## Objective
+Set up CSS custom properties (variables) in `main.css` to enable easy theming across all components.
+
+## File to Modify
+- `app/assets/css/main.css`
+
+## Implementation
+
+Add the following CSS variables to `:root`:
+
+```css
 :root {
   /* Background colors */
   --color-bg-primary: #fff;
@@ -35,40 +47,9 @@
   --input-frame-bg: #e0e0e0;
   --input-container-bg: #fff;
 }
+```
 
-/* Reset and base styles */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html, body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  color: #333;
-  background: #fff;
-}
-
-/* Prevent black flash during page transitions/reloads */
-html {
-  background-color: #fff !important;
-}
-
-/* Ensure Nuxt app container has background */
-#__nuxt {
-  background-color: #fff;
-  min-height: 100vh;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-button {
-  font-family: inherit;
-  font-size: inherit;
-}
+## Expected Outcome
+- CSS variables defined in `:root`
+- No visual changes yet (variables just defined, not applied)
+- Foundation ready for other tasks to use

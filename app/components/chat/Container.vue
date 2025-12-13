@@ -1,10 +1,15 @@
 <template>
   <div class="chat-container">
-    <ChatMessageList :messages="messages" :is-streaming="isStreaming" />
+    <ChatMessageList
+      :messages="messages"
+      :is-streaming="isStreaming"
+      @suggestion-click="handleSuggestionClick"
+    />
 
     <!-- Unified input container -->
     <div class="unified-input-section">
-      <form class="unified-input-container" @submit.prevent="handleSubmit">
+      <div class="input-frame">
+        <form class="unified-input-container" @submit.prevent="handleSubmit">
         <textarea
           ref="textareaRef"
           v-model="inputText"
@@ -53,6 +58,7 @@
           </div>
         </div>
       </form>
+      </div>
     </div>
   </div>
 </template>
@@ -138,6 +144,11 @@ const handleProviderChange = (prefs: ProviderPreferences) => {
 const handleModelSelected = (modelId: string, modelName: string) => {
   emit('model-selected', modelId, modelName);
 };
+
+const handleSuggestionClick = (suggestion: string) => {
+  inputText.value = suggestion;
+  textareaRef.value?.focus();
+};
 </script>
 
 <style scoped>
@@ -155,29 +166,33 @@ const handleModelSelected = (modelId: string, modelName: string) => {
   left: 0;
   right: 0;
   display: flex;
-  flex-direction: column;
-  padding: 16px 24px 16px;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  justify-content: center;
+  padding: 0 24px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.input-frame {
+  pointer-events: auto;
+  background: #d4d4d4;
+  border-radius: 20px 20px 0 0;
+  padding: 6px 6px 0 6px;
+  width: 100%;
+  max-width: 800px;
 }
 
 .unified-input-container {
   display: flex;
   flex-direction: column;
   background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 16px;
+  border: none;
+  border-radius: 16px 16px 0 0;
   overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  max-width: 800px;
-  margin: 0 auto;
   width: 100%;
 }
 
 .unified-input-container:focus-within {
-  border-color: #171717;
-  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.06);
+  box-shadow: none;
 }
 
 .unified-input-container textarea {

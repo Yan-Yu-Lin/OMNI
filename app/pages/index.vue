@@ -1,25 +1,12 @@
 <template>
   <div class="home-page">
     <!-- Welcome content -->
-    <div class="welcome-section">
-      <h1 class="welcome-title">AI Chat</h1>
-      <p class="welcome-subtitle">Start a conversation with AI</p>
-
-      <div class="suggestions">
-        <button
-          v-for="suggestion in suggestions"
-          :key="suggestion"
-          class="suggestion-chip"
-          @click="handleSuggestionClick(suggestion)"
-        >
-          {{ suggestion }}
-        </button>
-      </div>
-    </div>
+    <ChatWelcomeSection @suggestion-click="handleSuggestionClick" />
 
     <!-- Unified input section at bottom -->
     <div class="unified-input-section">
-      <form class="unified-input-container" @submit.prevent="handleSubmit">
+      <div class="input-frame">
+        <form class="unified-input-container" @submit.prevent="handleSubmit">
         <textarea
           ref="textareaRef"
           v-model="inputText"
@@ -66,6 +53,7 @@
           </div>
         </div>
       </form>
+      </div>
     </div>
   </div>
 </template>
@@ -134,14 +122,6 @@ watch(() => userProviderOverride.value, async (newPrefs) => {
   }
 }, { deep: true });
 
-// Suggestion prompts
-const suggestions = [
-  'Explain quantum computing',
-  'Write a Python script',
-  'Help me brainstorm ideas',
-  'Summarize a topic',
-];
-
 // Handle suggestion chip click
 const handleSuggestionClick = (suggestion: string) => {
   inputText.value = suggestion;
@@ -198,52 +178,6 @@ onMounted(async () => {
   background: #fff;
 }
 
-.welcome-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-}
-
-.welcome-title {
-  font-size: 36px;
-  font-weight: 600;
-  color: #171717;
-  margin: 0 0 8px;
-}
-
-.welcome-subtitle {
-  font-size: 16px;
-  color: #666;
-  margin: 0 0 32px;
-}
-
-.suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  max-width: 500px;
-}
-
-.suggestion-chip {
-  padding: 8px 16px;
-  background: #f5f5f5;
-  border: 1px solid #e0e0e0;
-  border-radius: 20px;
-  font-size: 14px;
-  color: #333;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.suggestion-chip:hover {
-  background: #eee;
-  border-color: #ccc;
-}
-
 /* Unified input section - matches ChatContainer */
 .unified-input-section {
   position: absolute;
@@ -251,29 +185,33 @@ onMounted(async () => {
   left: 0;
   right: 0;
   display: flex;
-  flex-direction: column;
-  padding: 16px 24px 16px;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  justify-content: center;
+  padding: 0 24px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.input-frame {
+  pointer-events: auto;
+  background: #d4d4d4;
+  border-radius: 20px 20px 0 0;
+  padding: 6px 6px 0 6px;
+  width: 100%;
+  max-width: 800px;
 }
 
 .unified-input-container {
   display: flex;
   flex-direction: column;
   background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 16px;
+  border: none;
+  border-radius: 16px 16px 0 0;
   overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  max-width: 800px;
-  margin: 0 auto;
   width: 100%;
 }
 
 .unified-input-container:focus-within {
-  border-color: #171717;
-  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.06);
+  box-shadow: none;
 }
 
 .unified-input-container textarea {

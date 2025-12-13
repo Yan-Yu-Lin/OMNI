@@ -26,27 +26,13 @@
             <span v-if="isStreaming && isLastTextPart(index)" class="cursor"></span>
           </div>
 
-          <!-- Web Search tool -->
-          <ToolsToolCard
+          <!-- Web Search tool (compact) -->
+          <ToolsWebSearchCard
             v-else-if="part.type === 'tool-web_search'"
-            tool-name="web_search"
             :state="part.state"
             :input="part.input"
             :output="part.output"
-            :error-text="part.errorText"
-          >
-            <template #input="{ input: toolInput }">
-              <div class="tool-input-summary">
-                <strong>Query:</strong> {{ toolInput.query }}
-                <span v-if="toolInput.limit" class="tool-input-detail">
-                  ({{ toolInput.limit }} results)
-                </span>
-              </div>
-            </template>
-            <template #output="{ output: toolOutput }">
-              <ToolsSearchResults :results="toolOutput.results" />
-            </template>
-          </ToolsToolCard>
+          />
 
           <!-- Scrape URL tool -->
           <ToolsToolCard

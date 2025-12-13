@@ -1,26 +1,7 @@
 <template>
   <div ref="containerRef" class="message-list">
     <template v-if="messages.length === 0">
-      <div class="empty-state">
-        <div class="empty-icon">
-          <svg
-            width="48"
-            height="48"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
-        <h2 class="empty-title">Start a conversation</h2>
-        <p class="empty-description">
-          Send a message to begin chatting with the AI assistant.
-        </p>
-      </div>
+      <ChatWelcomeSection @suggestion-click="$emit('suggestion-click', $event)" />
     </template>
     <template v-else>
       <ChatMessage
@@ -48,6 +29,10 @@ import type { UIMessage } from 'ai';
 const props = defineProps<{
   messages: UIMessage[];
   isStreaming?: boolean;
+}>();
+
+defineEmits<{
+  'suggestion-click': [suggestion: string];
 }>();
 
 const containerRef = ref<HTMLElement>();
@@ -116,34 +101,6 @@ watch(
   overflow-y: auto;
   scroll-behavior: smooth;
   padding-bottom: 140px; /* Space for floating input */
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 48px;
-  text-align: center;
-}
-
-.empty-icon {
-  color: #d0d0d0;
-  margin-bottom: 20px;
-}
-
-.empty-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #171717;
-  margin-bottom: 8px;
-}
-
-.empty-description {
-  font-size: 15px;
-  color: #666;
-  max-width: 300px;
 }
 
 .streaming-indicator {

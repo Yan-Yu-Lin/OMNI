@@ -1,41 +1,22 @@
 <template>
   <div class="crawl-results">
-    <div class="results-summary">
-      Found {{ result.pagesFound }} page{{ result.pagesFound !== 1 ? 's' : '' }}
+    <div class="results-header">
+      <span class="results-count">Found {{ result.pagesFound }} page{{ result.pagesFound !== 1 ? 's' : '' }}</span>
     </div>
 
-    <div class="pages-list">
-      <div
+    <div class="results-list">
+      <a
         v-for="(page, index) in result.pages"
         :key="index"
-        class="crawl-page"
+        :href="page.url"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="result-item"
       >
-        <div class="page-header">
-          <a :href="page.url" target="_blank" rel="noopener" class="page-title">
-            {{ page.title || 'Untitled' }}
-          </a>
-          <div class="page-url">{{ formatUrl(page.url) }}</div>
-        </div>
-
-        <details v-if="page.markdown" class="page-content">
-          <summary class="content-toggle">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M4 6L8 10L12 6"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            View content
-            <span class="content-length">({{ formatLength(page.markdown.length) }})</span>
-          </summary>
-          <div class="markdown-preview">
-            {{ truncate(page.markdown, 800) }}
-          </div>
-        </details>
-      </div>
+        <span class="result-favicon">{{ getDomainInitials(page.url) }}</span>
+        <span class="result-title">{{ page.title || 'Untitled' }}</span>
+        <span class="result-domain">{{ getDomain(page.url) }}</span>
+      </a>
     </div>
   </div>
 </template>
@@ -47,24 +28,22 @@ defineProps<{
   result: CrawlSiteOutput;
 }>();
 
-const formatUrl = (url: string) => {
+const getDomain = (url: string): string => {
   try {
-    const parsed = new URL(url);
-    const path = parsed.pathname !== '/' ? parsed.pathname : '';
-    return parsed.hostname + path.slice(0, 50) + (path.length > 50 ? '...' : '');
+    return new URL(url).hostname.replace('www.', '');
   } catch {
-    return url.slice(0, 60) + (url.length > 60 ? '...' : '');
+    return url;
   }
 };
 
-const truncate = (text: string, maxLength: number) => {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength).trim() + '...';
-};
-
-const formatLength = (length: number) => {
-  if (length < 1000) return `${length} chars`;
-  return `${(length / 1000).toFixed(1)}k chars`;
+const getDomainInitials = (url: string): string => {
+  const domain = getDomain(url);
+  // Get first 2 characters or first letter of each word
+  const parts = domain.split('.');
+  if (parts[0].length <= 3) {
+    return parts[0].toUpperCase();
+  }
+  return parts[0].substring(0, 2).toUpperCase();
 };
 </script>
 
@@ -72,115 +51,57 @@ const formatLength = (length: number) => {
 .crawl-results {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
-.results-summary {
-  font-size: 12px;
-  color: #737373;
-  font-weight: 500;
+.results-header {
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--color-text-secondary, #666);
 }
 
-.pages-list {
+.results-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 2px;
 }
 
-.crawl-page {
-  background: #fff;
-  padding: 14px 16px;
-  border-radius: 8px;
-  border: 1px solid #e5e5e5;
-  transition: border-color 0.15s ease;
-}
-
-.crawl-page:hover {
-  border-color: #d0d0d0;
-}
-
-.page-header {
-  margin-bottom: 8px;
-}
-
-.page-title {
-  font-weight: 600;
-  font-size: 14px;
-  color: #1a0dab;
-  text-decoration: none;
-  display: block;
-  line-height: 1.4;
-}
-
-.page-title:hover {
-  text-decoration: underline;
-}
-
-.page-url {
-  font-size: 12px;
-  color: #006621;
-  margin-top: 2px;
-  word-break: break-all;
-  font-family:
-    'SF Mono',
-    'Menlo',
-    'Monaco',
-    monospace;
-}
-
-.page-content {
-  margin-top: 8px;
-}
-
-.content-toggle {
-  cursor: pointer;
-  font-size: 12px;
-  color: #525252;
-  display: inline-flex;
+.result-item {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  margin: -4px -8px;
-  border-radius: 4px;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius-sm, 4px);
+  text-decoration: none;
   transition: background-color 0.15s ease;
 }
 
-.content-toggle:hover {
-  background: #f5f5f5;
-  color: #171717;
+.result-item:hover {
+  background: var(--color-bg-secondary, #f5f5f5);
 }
 
-.content-toggle svg {
-  transition: transform 0.2s ease;
-}
-
-.page-content[open] .content-toggle svg {
-  transform: rotate(180deg);
-}
-
-.content-length {
-  font-weight: 400;
-  color: #737373;
+.result-favicon {
+  flex-shrink: 0;
+  width: 24px;
   font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #666);
+  text-align: center;
 }
 
-.markdown-preview {
-  margin-top: 10px;
-  font-size: 12px;
-  line-height: 1.6;
-  background: #f9fafb;
-  padding: 12px;
-  border-radius: 6px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 200px;
-  overflow-y: auto;
-  color: #525252;
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+.result-title {
+  flex: 1;
+  font-size: 14px;
+  color: var(--color-accent-blue, #1a0dab);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-domain {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--color-text-muted, #a0a0a0);
 }
 </style>
