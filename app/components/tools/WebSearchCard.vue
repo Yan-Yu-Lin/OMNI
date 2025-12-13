@@ -181,7 +181,7 @@ const getDomainInitials = (url: string): string => {
 .results-wrapper {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.25s ease-out;
+  transition: grid-template-rows 0.15s ease-out;
 }
 
 .results-wrapper.open {
@@ -189,11 +189,16 @@ const getDomainInitials = (url: string): string => {
 }
 
 .search-results {
+  min-height: 0;
   overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.1s ease-out;
 }
 
 .results-wrapper.open .search-results {
   padding: 6px 8px;
+  opacity: 1;
+  transition: opacity 0.15s ease-in 0.05s;
 }
 
 .result-item {
