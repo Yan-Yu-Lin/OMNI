@@ -151,12 +151,13 @@ const handleKeydown = (e: KeyboardEvent) => {
 };
 
 // Auto-resize textarea
+const MIN_TEXTAREA_HEIGHT = 60;
 watch(inputText, async () => {
   await nextTick();
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto';
     textareaRef.value.style.height =
-      Math.min(textareaRef.value.scrollHeight, 200) + 'px';
+      Math.max(MIN_TEXTAREA_HEIGHT, Math.min(textareaRef.value.scrollHeight, 200)) + 'px';
   }
 });
 
@@ -165,6 +166,9 @@ watch(inputText, async () => {
 onMounted(async () => {
   await fetchSettings(true);
   fetchModels();
+  if (textareaRef.value) {
+    textareaRef.value.style.height = MIN_TEXTAREA_HEIGHT + 'px';
+  }
   textareaRef.value?.focus();
 });
 </script>
@@ -261,7 +265,7 @@ onMounted(async () => {
   line-height: 1.5;
   color: #171717;
   height: auto;
-  min-height: 24px;
+  min-height: 60px;
   max-height: 200px;
   overflow-y: auto;
   padding: 14px 16px 0;
@@ -280,7 +284,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px 10px;
-  min-height: 44px;
+  min-height: 60px;
 }
 
 .toolbar-left {
