@@ -188,8 +188,8 @@ const handleSuggestionClick = (suggestion: string) => {
   position: absolute;
   inset: 0;
   background: rgba(180, 180, 180, 0.4);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
   border-radius: 20px 20px 0 0;
   z-index: -1;
 
@@ -219,8 +219,8 @@ const handleSuggestionClick = (suggestion: string) => {
   display: flex;
   flex-direction: column;
   background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   border: none;
   border-radius: 14px 14px 0 0;
   overflow: hidden;
