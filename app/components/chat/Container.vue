@@ -174,7 +174,9 @@ const handleSuggestionClick = (suggestion: string) => {
 
 .input-frame {
   pointer-events: auto;
-  background: #d4d4d4;
+  background: rgba(180, 180, 180, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-radius: 20px 20px 0 0;
   padding: 6px 6px 0 6px;
   width: 100%;
@@ -184,7 +186,9 @@ const handleSuggestionClick = (suggestion: string) => {
 .unified-input-container {
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: none;
   border-radius: 16px 16px 0 0;
   overflow: hidden;

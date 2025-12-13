@@ -41,7 +41,12 @@
           rel="noopener noreferrer"
           class="result-item"
         >
-          <span class="result-favicon">{{ getDomainInitials(result.url) }}</span>
+          <img
+            :src="getFaviconUrl(result.url)"
+            :alt="getDomain(result.url)"
+            class="result-favicon"
+            @error="handleFaviconError"
+          />
           <span class="result-title">{{ result.title || 'Untitled' }}</span>
           <span class="result-domain">{{ getDomain(result.url) }}</span>
         </a>
@@ -91,13 +96,14 @@ const getDomain = (url: string): string => {
   }
 };
 
-const getDomainInitials = (url: string): string => {
+const getFaviconUrl = (url: string): string => {
   const domain = getDomain(url);
-  const parts = domain.split('.');
-  if (parts[0].length <= 3) {
-    return parts[0].toUpperCase();
-  }
-  return parts[0].substring(0, 2).toUpperCase();
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+};
+
+const handleFaviconError = (e: Event) => {
+  const img = e.target as HTMLImageElement;
+  img.style.display = 'none';
 };
 </script>
 
@@ -107,20 +113,20 @@ const getDomainInitials = (url: string): string => {
   border-radius: 8px;
   margin: 8px 0;
   overflow: hidden;
-  background: #f0f0f0;
-  transition: background-color 0.2s ease;
+  background: #fff;
+  transition: background-color 0.15s ease;
 }
 
-/* When expanded, card becomes white */
-.web-search-card.expanded {
-  background: #fff;
+/* Darker on hover when collapsed */
+.web-search-card:not(.expanded):hover {
+  background: #f5f5f5;
 }
 
 .search-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 8px 14px;
   cursor: pointer;
   user-select: none;
 }
@@ -192,13 +198,13 @@ const getDomainInitials = (url: string): string => {
   min-height: 0;
   overflow: hidden;
   opacity: 0;
-  transition: opacity 0.1s ease-out;
+  transition: opacity 0s; /* Instant hide on collapse */
 }
 
 .results-wrapper.open .search-results {
   padding: 6px 8px;
   opacity: 1;
-  transition: opacity 0.15s ease-in 0.05s;
+  transition: opacity 0.12s ease-in 0.03s; /* Fade in after slight delay */
 }
 
 .result-item {
@@ -217,11 +223,10 @@ const getDomainInitials = (url: string): string => {
 
 .result-favicon {
   flex-shrink: 0;
-  width: 24px;
-  font-size: 10px;
-  font-weight: 600;
-  color: #666;
-  text-align: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  object-fit: contain;
 }
 
 .result-title {
