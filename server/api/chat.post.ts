@@ -137,11 +137,34 @@ export default defineEventHandler(async (event) => {
   console.log('[Chat API] Conversation exists:', !isNewConversation, 'isNew:', isNewConversation);
   console.log('[Chat API] Trigger:', trigger, 'ParentId:', parentId);
 
-  // 2. Save the user message to DB with optional parentId for branching
-  const userMessageId = userMessage.id;
-  saveUserMessage(conversationId, userMessage, parentId);
+  // 2. Handle regenerate vs normal flow
+  // For regenerate: don't save a new user message, just create sibling assistant response
+  // The parentId is the user message that the new assistant response branches from
+  let userMessageId: string | undefined;
 
-  // 2.5 Update lastUsed ONLY for new conversations (first message)
+  if (trigger === 'regenerate') {
+    // Regenerate: parentId is the user message to branch from
+    // Don't save a new user message - just generate new assistant response
+    userMessageId = parentId;
+    console.log('[Chat API] Regenerate mode - using existing user message:', userMessageId);
+  } else {
+    // Normal or edit flow: save the user message
+
+    // Determine effective parentId for branching
+    // If no parentId provided and not a new conversation, use the current active_leaf_id
+    let effectiveParentId = parentId;
+    if (!effectiveParentId && !isNewConversation) {
+      const conv = db.prepare('SELECT active_leaf_id FROM conversations WHERE id = ?').get(conversationId) as { active_leaf_id: string | null } | undefined;
+      effectiveParentId = conv?.active_leaf_id ?? undefined;
+    }
+    console.log('[Chat API] Effective parentId:', effectiveParentId);
+
+    // 3. Save the user message to DB with parentId for branching
+    userMessageId = userMessage.id;
+    saveUserMessage(conversationId, userMessage, effectiveParentId);
+  }
+
+  // 4. Update lastUsed ONLY for new conversations (first message)
   // This is the single source of truth for what new conversations should default to
   // Resuming old conversations should NOT change the user's default preference
   if (isNewConversation) {
@@ -179,12 +202,12 @@ export default defineEventHandler(async (event) => {
     autoGenerateTitle(conversationId, userMessage);
   }
 
-  // 3. Set conversation status to streaming
+  // 5. Set conversation status to streaming
   setConversationStatus(conversationId, 'streaming');
 
   const openrouter = getOpenRouterClient();
 
-  // Build provider options from preferences
+  // 6. Build provider options from preferences
   const providerOptions = providerPreferences ? {
     provider: {
       // If specific provider selected, put it first in order
@@ -198,10 +221,10 @@ export default defineEventHandler(async (event) => {
     },
   } : undefined;
 
-  // 4. Create tools for this conversation (sandbox tools need conversationId)
+  // 7. Create tools for this conversation (sandbox tools need conversationId)
   const tools = createAllTools(conversationId);
 
-  // 5. Start AI streaming
+  // 8. Start AI streaming
   const result = streamText({
     model: openrouter(selectedModel, providerOptions),
     system: SYSTEM_PROMPT,
@@ -225,7 +248,7 @@ export default defineEventHandler(async (event) => {
     },
   });
 
-  // 5. Return the SDK's streaming response with server-side consumption
+  // 9. Return the SDK's streaming response with server-side consumption
   // This "tees" the stream: one copy goes to browser, one is consumed server-side
   return result.toUIMessageStreamResponse({
     // Original messages for proper message ID handling

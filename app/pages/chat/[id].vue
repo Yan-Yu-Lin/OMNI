@@ -146,7 +146,7 @@ const initializeChat = (initialMessages: UIMessage[]) => {
     id: conversationId.value,
     messages: initialMessages,
     transport,
-    onFinish: () => {
+    onFinish: async () => {
       console.log('[Chat] Stream finished');
       conversationStatus.value = 'idle';
       // After first message, conversation is created in DB - no longer a draft
@@ -155,6 +155,10 @@ const initializeChat = (initialMessages: UIMessage[]) => {
       }
       fetchConversations(true); // Force refresh to update title/timestamp
       fetchSettings(true); // Refresh settings to get updated lastUsed
+
+      // Reload and rebuild tree to sync with server state
+      // This ensures branch navigation is up-to-date after new messages
+      await reloadAndRebuildTree();
     },
     onError: (error) => {
       console.error('[Chat] Error:', error);
@@ -279,6 +283,31 @@ const refreshFromDB = async () => {
   }
 };
 
+// Reload conversation from DB and rebuild the message tree
+// Call this after operations that modify the tree (send, edit, regenerate, switch)
+const reloadAndRebuildTree = async () => {
+  try {
+    const conv = await getConversation(conversationId.value);
+    if (!conv) return;
+
+    // Rebuild message tree from all messages
+    const allMessages = conv.messages as BranchMessage[];
+    const activeLeafId = (conv as { activeLeafId?: string | null }).activeLeafId ?? null;
+    buildTree(allMessages, activeLeafId);
+
+    // Get the active path and update chat state
+    const newPath = getActivePath();
+    chatMessages.value = newPath;
+
+    // Sync SDK state with new message path
+    if (chat.value) {
+      chat.value.messages = newPath;
+    }
+  } catch (err) {
+    console.error('[Chat] Error reloading tree:', err);
+  }
+};
+
 // Send a message (with optional parentId for branching)
 const handleSend = async (text: string, parentId?: string) => {
   // Check if already streaming
@@ -300,10 +329,11 @@ const handleSend = async (text: string, parentId?: string) => {
     const trigger = parentId ? 'edit' : 'submit';
 
     // Use the SDK's sendMessage method with body options for branching
-    await chat.value.sendMessage({
-      text,
-      body: { parentId, trigger },
-    });
+    // sendMessage(message, options) where options.body is passed to the transport
+    await chat.value.sendMessage(
+      { text },
+      { body: { parentId, trigger } }
+    );
   } catch (err) {
     console.error('[Chat] Error sending message:', err);
     conversationStatus.value = 'error';
@@ -326,14 +356,8 @@ const handleSwitchBranch = async (messageId: string) => {
     // Call API to update active_leaf_id in database
     await switchToBranch(conversationId.value, messageId);
 
-    // Rebuild the active path from the tree
-    const newPath = getActivePath();
-    chatMessages.value = newPath;
-
-    // Sync SDK state with new message path
-    if (chat.value) {
-      chat.value.setMessages(newPath);
-    }
+    // Reload and rebuild tree to ensure consistency
+    await reloadAndRebuildTree();
   } catch (err) {
     console.error('[Chat] Error switching branch:', err);
   }
@@ -371,7 +395,7 @@ const submitEdit = async () => {
     const editedIndex = currentMessages.findIndex(m => m.id === messageToEdit.id);
     if (editedIndex > 0) {
       const truncatedMessages = currentMessages.slice(0, editedIndex);
-      chat.value.setMessages(truncatedMessages);
+      chat.value.messages = truncatedMessages;
       chatMessages.value = truncatedMessages;
     }
   }
@@ -408,28 +432,41 @@ const handleRegenerate = async (message: UIMessage) => {
       return;
     }
 
-    // Truncate messages to include only up to the parent (user message)
-    const messagesUpToParent = chatMessages.value.slice(0, parentIndex + 1);
+    const parentMessage = chatMessages.value[parentIndex];
+    if (!parentMessage) {
+      console.error('[Chat] Parent message not found at index');
+      return;
+    }
+
+    // Extract text from parent user message (needed to send to API)
+    const textPart = parentMessage.parts?.find(p => p.type === 'text');
+    const parentText = (textPart as { type: 'text'; text: string })?.text || '';
+
+    // Truncate messages to NOT include the parent (we'll re-send it via sendMessage)
+    // This way the SDK properly sends the user message to the API
+    const messagesBeforeParent = chatMessages.value.slice(0, parentIndex);
 
     // Update SDK state
     if (chat.value) {
-      chat.value.setMessages(messagesUpToParent);
-      chatMessages.value = messagesUpToParent;
+      chat.value.messages = messagesBeforeParent;
+      chatMessages.value = messagesBeforeParent;
     }
 
     // Set streaming state
     conversationStatus.value = 'streaming';
 
-    // Trigger a new AI response by calling the API directly
-    // We need to send the messages up to and including the parent,
-    // with trigger='regenerate' to indicate this is a regeneration
-    await chat.value?.sendMessage({
-      text: '', // Empty - we're not adding a new user message
-      body: {
-        parentId,
-        trigger: 'regenerate',
-      },
-    });
+    // Re-send the parent user message with trigger='regenerate'
+    // The server will skip saving this user message and just generate a new response
+    // sendMessage(message, options) where options.body is passed to the transport
+    await chat.value?.sendMessage(
+      { text: parentText },
+      {
+        body: {
+          parentId, // This is the user message ID - new assistant will be its sibling
+          trigger: 'regenerate',
+        },
+      }
+    );
   } catch (err) {
     console.error('[Chat] Error regenerating:', err);
     conversationStatus.value = 'error';

@@ -114,18 +114,9 @@ export function saveAssistantMessages(
   `);
   upsert.run(messageId, conversationId, 'assistant', content, parentId ?? null);
 
-  // Delete any other assistant messages from this response (cleanup duplicates)
-  // Only delete messages created after the last user message
-  db.prepare(`
-    DELETE FROM messages
-    WHERE conversation_id = ?
-      AND role = 'assistant'
-      AND id != ?
-      AND created_at >= (
-        SELECT MAX(created_at) FROM messages
-        WHERE conversation_id = ? AND role = 'user'
-      )
-  `).run(conversationId, messageId, conversationId);
+  // NOTE: Removed DELETE statement that was destroying assistant sibling branches
+  // The DELETE was cleaning up "duplicate" assistant messages, but with branching
+  // support we need to preserve all assistant messages (siblings in different branches)
 
   // Update conversation timestamp
   db.prepare(`
