@@ -31,8 +31,8 @@
       </div>
     </div>
 
-    <Transition name="expand">
-      <div v-if="isExpanded && results.length > 0" class="search-results">
+    <div class="results-wrapper" :class="{ open: isExpanded && results.length > 0 }">
+      <div class="search-results">
         <a
           v-for="result in results"
           :key="result.url"
@@ -46,7 +46,7 @@
           <span class="result-domain">{{ getDomain(result.url) }}</span>
         </a>
       </div>
-    </Transition>
+    </div>
   </div>
 </template>
 
@@ -107,7 +107,13 @@ const getDomainInitials = (url: string): string => {
   border-radius: 8px;
   margin: 8px 0;
   overflow: hidden;
-  background: #fafafa;
+  background: #f0f0f0;
+  transition: background-color 0.2s ease;
+}
+
+/* When expanded, card becomes white */
+.web-search-card.expanded {
+  background: #fff;
 }
 
 .search-header {
@@ -119,8 +125,9 @@ const getDomainInitials = (url: string): string => {
   user-select: none;
 }
 
-.search-header:hover {
-  background: rgba(0, 0, 0, 0.02);
+/* Only show hover effect when collapsed */
+.web-search-card:not(.expanded) .search-header:hover {
+  background: rgba(0, 0, 0, 0.03);
 }
 
 .header-left {
@@ -170,10 +177,23 @@ const getDomainInitials = (url: string): string => {
   transform: rotate(180deg);
 }
 
+/* Smooth expand using grid */
+.results-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease-out;
+}
+
+.results-wrapper.open {
+  grid-template-rows: 1fr;
+}
+
 .search-results {
-  border-top: 1px solid #e5e5e5;
+  overflow: hidden;
+}
+
+.results-wrapper.open .search-results {
   padding: 6px 8px;
-  background: #fff;
 }
 
 .result-item {
@@ -212,24 +232,5 @@ const getDomainInitials = (url: string): string => {
   flex-shrink: 0;
   font-size: 12px;
   color: #999;
-}
-
-/* Expand transition */
-.expand-enter-active,
-.expand-leave-active {
-  transition: all 0.2s ease;
-  overflow: hidden;
-}
-
-.expand-enter-from,
-.expand-leave-to {
-  opacity: 0;
-  max-height: 0;
-}
-
-.expand-enter-to,
-.expand-leave-from {
-  opacity: 1;
-  max-height: 500px;
 }
 </style>
