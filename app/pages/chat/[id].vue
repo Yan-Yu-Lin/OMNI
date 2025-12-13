@@ -27,7 +27,7 @@ const router = useRouter();
 
 const conversationId = computed(() => route.params.id as string);
 
-const { fetchConversations, getConversation, updateConversation, consumePendingMessage } = useConversations();
+const { fetchConversations, getConversation, updateConversation } = useConversations();
 
 // Models composable for model selection
 const { models, fetchModels } = useModels();
@@ -280,19 +280,6 @@ onMounted(async () => {
   await fetchSettings(true); // Force refresh to get latest lastUsed
   fetchModels();
   await loadConversation();
-
-  // Check for pending message from home page
-  const { message: pendingMsg, model: pendingModelId } = consumePendingMessage();
-  if (pendingMsg) {
-    // If a model was specified with the pending message, use it
-    if (pendingModelId) {
-      selectedModelId.value = pendingModelId;
-    }
-    // Send the pending message immediately
-    // Use nextTick to ensure chat is fully initialized
-    await nextTick();
-    handleSend(pendingMsg);
-  }
 });
 
 // Cleanup on unmount

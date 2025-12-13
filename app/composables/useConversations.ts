@@ -8,10 +8,6 @@ export function useConversations() {
   const error = useState<string | null>('conversations-error', () => null);
   const hasFetched = useState<boolean>('conversations-fetched', () => false);
 
-  // Pending message state for cross-page message passing (home page -> chat page)
-  const pendingMessage = useState<string | null>('pending-message', () => null);
-  const pendingModel = useState<string | null>('pending-model', () => null);
-
   // Fetch all conversations (with guard against redundant fetches)
   const fetchConversations = async (force = false) => {
     // Skip if already fetched (unless forced)
@@ -144,23 +140,6 @@ export function useConversations() {
     }
   };
 
-  // Set pending message (called from home page before navigation)
-  const setPendingMessage = (message: string, model?: string) => {
-    pendingMessage.value = message;
-    if (model) {
-      pendingModel.value = model;
-    }
-  };
-
-  // Get and clear pending message (called from chat page on mount)
-  const consumePendingMessage = () => {
-    const message = pendingMessage.value;
-    const model = pendingModel.value;
-    pendingMessage.value = null;
-    pendingModel.value = null;
-    return { message, model };
-  };
-
   return {
     conversations,
     loading,
@@ -172,10 +151,5 @@ export function useConversations() {
     deleteConversation,
     togglePin,
     saveMessages,
-    // Pending message helpers
-    pendingMessage,
-    pendingModel,
-    setPendingMessage,
-    consumePendingMessage,
   };
 }

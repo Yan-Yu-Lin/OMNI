@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef" class="message-list">
+  <div ref="containerRef" class="message-list" :class="{ empty: messages.length === 0 }">
     <template v-if="messages.length === 0">
       <ChatWelcomeSection @suggestion-click="$emit('suggestion-click', $event)" />
     </template>
@@ -101,6 +101,11 @@ watch(
   overflow-y: auto;
   scroll-behavior: smooth;
   padding-bottom: 140px; /* Space for floating input */
+}
+
+.message-list.empty {
+  display: flex;
+  flex-direction: column;
 }
 
 .streaming-indicator {
