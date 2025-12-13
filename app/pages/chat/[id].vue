@@ -153,7 +153,7 @@ const initializeChat = (initialMessages: UIMessage[]) => {
       if (isDraftConversation.value) {
         isDraftConversation.value = false;
       }
-      fetchConversations(true); // Force refresh to update title/timestamp
+      fetchConversations(true, true); // Silent refresh to avoid sidebar flicker
       fetchSettings(true); // Refresh settings to get updated lastUsed
 
       // Reload and rebuild tree to sync with server state
@@ -216,13 +216,13 @@ const loadConversation = async () => {
 
     // Build message tree for branching support
     // conv.messages contains all messages with parentId, conv.activeLeafId is the current branch
-    const allMessages = conv.messages as BranchMessage[];
+    const allMessages = conv.messages as unknown as BranchMessage[];
     const activeLeafId = (conv as { activeLeafId?: string | null }).activeLeafId ?? null;
     buildTree(allMessages, activeLeafId);
 
     // Use activePath for initial display (or fallback to all messages for old conversations)
     const activePath = (conv as { activePath?: BranchMessage[] }).activePath;
-    const initialMessages = activePath && activePath.length > 0 ? activePath : conv.messages;
+    const initialMessages = (activePath && activePath.length > 0 ? activePath : conv.messages) as unknown as UIMessage[];
 
     initializeChat(initialMessages);
 
@@ -261,13 +261,13 @@ const refreshFromDB = async () => {
     const conv = await getConversation(conversationId.value);
     if (conv) {
       // Rebuild message tree
-      const allMessages = conv.messages as BranchMessage[];
+      const allMessages = conv.messages as unknown as BranchMessage[];
       const activeLeafId = (conv as { activeLeafId?: string | null }).activeLeafId ?? null;
       buildTree(allMessages, activeLeafId);
 
       // Use activePath for display
       const activePath = (conv as { activePath?: BranchMessage[] }).activePath;
-      const displayMessages = activePath && activePath.length > 0 ? activePath : conv.messages;
+      const displayMessages = (activePath && activePath.length > 0 ? activePath : conv.messages) as unknown as UIMessage[];
 
       // Re-initialize chat with latest messages
       initializeChat(displayMessages);
@@ -291,17 +291,34 @@ const reloadAndRebuildTree = async () => {
     if (!conv) return;
 
     // Rebuild message tree from all messages
-    const allMessages = conv.messages as BranchMessage[];
+    const allMessages = conv.messages as unknown as BranchMessage[];
     const activeLeafId = (conv as { activeLeafId?: string | null }).activeLeafId ?? null;
     buildTree(allMessages, activeLeafId);
 
-    // Get the active path and update chat state
-    const newPath = getActivePath();
+    // Get the active path; fall back to all messages if empty (e.g., activeLeafId not yet set)
+    let newPath = getActivePath() as unknown as UIMessage[];
+    if (!newPath || newPath.length === 0) {
+      const convAny = conv as any;
+      if (convAny.activePath && Array.isArray(convAny.activePath) && convAny.activePath.length > 0) {
+        newPath = convAny.activePath as UIMessage[];
+      } else {
+        newPath = conv.messages as unknown as UIMessage[];
+      }
+    }
+
     chatMessages.value = newPath;
 
     // Sync SDK state with new message path
     if (chat.value) {
-      chat.value.messages = newPath;
+      // Prefer the SDK setter when available to keep internal refs in sync
+      // Fallback to direct assignment for backward compatibility
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyChat = chat.value as any;
+      if (typeof anyChat.setMessages === 'function') {
+        anyChat.setMessages(newPath);
+      } else {
+        chat.value.messages = newPath;
+      }
     }
   } catch (err) {
     console.error('[Chat] Error reloading tree:', err);
@@ -448,7 +465,17 @@ const handleRegenerate = async (message: UIMessage) => {
 
     // Update SDK state
     if (chat.value) {
-      chat.value.messages = messagesBeforeParent;
+      // Keep SDK internal refs aligned and prevent the old path from being resent
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyChat = chat.value as any;
+      if (anyChat?.state?.messagesRef) {
+        anyChat.state.messagesRef.value = messagesBeforeParent as unknown as UIMessage[];
+      }
+      if (typeof anyChat.setMessages === 'function') {
+        anyChat.setMessages(messagesBeforeParent as unknown as UIMessage[]);
+      } else {
+        chat.value.messages = messagesBeforeParent;
+      }
       chatMessages.value = messagesBeforeParent;
     }
 
@@ -459,7 +486,8 @@ const handleRegenerate = async (message: UIMessage) => {
     // The server will skip saving this user message and just generate a new response
     // sendMessage(message, options) where options.body is passed to the transport
     await chat.value?.sendMessage(
-      { text: parentText },
+      // Preserve the original user message ID to avoid minting a duplicate client-side ID
+      { id: parentId, text: parentText } as any,
       {
         body: {
           parentId, // This is the user message ID - new assistant will be its sibling

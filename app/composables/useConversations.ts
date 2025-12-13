@@ -9,13 +9,15 @@ export function useConversations() {
   const hasFetched = useState<boolean>('conversations-fetched', () => false);
 
   // Fetch all conversations (with guard against redundant fetches)
-  const fetchConversations = async (force = false) => {
+  const fetchConversations = async (force = false, quiet = false) => {
     // Skip if already fetched (unless forced)
     if (hasFetched.value && !force) {
       return;
     }
 
-    loading.value = true;
+    if (!quiet) {
+      loading.value = true;
+    }
     error.value = null;
 
     try {
@@ -25,7 +27,9 @@ export function useConversations() {
       error.value = e instanceof Error ? e.message : 'Failed to fetch conversations';
       console.error('Failed to fetch conversations:', e);
     } finally {
-      loading.value = false;
+      if (!quiet) {
+        loading.value = false;
+      }
     }
   };
 
