@@ -30,8 +30,8 @@ export default defineNuxtConfig({
             .sidebar-header { display: flex; align-items: center; gap: 8px; height: 56px; padding: 12px; }
             .sidebar-content { flex: 1; overflow-y: auto; }
             .sidebar-footer { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
-            .toggle-btn { background: transparent; border: none; width: 32px; height: 32px; }
             .new-chat-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; }
+            .sidebar-toggle-floating { position: absolute; top: 12px; left: 12px; z-index: 100; width: 36px; height: 36px; border-radius: 8px; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; }
             .footer-link { display: flex; align-items: center; gap: 10px; }
             .conversation-list { display: flex; flex-direction: column; }
           `,

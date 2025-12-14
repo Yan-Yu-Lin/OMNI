@@ -1,27 +1,6 @@
 <template>
   <div class="sidebar-container" :class="{ collapsed }">
     <div class="sidebar-header">
-      <button
-        class="toggle-btn"
-        @click="$emit('toggle-sidebar')"
-        :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="toggle-icon"
-          :class="{ rotated: collapsed }"
-        >
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </button>
       <button class="new-chat-btn" @click="$emit('new-chat')">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 5v14M5 12h14"/>
@@ -62,7 +41,6 @@ defineProps<{
 
 defineEmits<{
   'new-chat': [];
-  'toggle-sidebar': [];
 }>();
 </script>
 
@@ -87,36 +65,6 @@ defineEmits<{
   gap: 8px;
   height: 56px; /* Fixed height prevents jitter during collapse */
   flex-shrink: 0;
-}
-
-.toggle-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--sidebar-text-muted);
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-  flex-shrink: 0;
-}
-
-.toggle-btn:hover {
-  background: var(--sidebar-hover);
-  color: var(--sidebar-text);
-}
-
-.toggle-icon {
-  transition: transform 0.2s ease;
-}
-
-.toggle-icon.rotated {
-  transform: rotate(180deg);
 }
 
 .new-chat-btn {

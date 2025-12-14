@@ -4,7 +4,6 @@
       <LayoutSidebar
         :collapsed="sidebarCollapsed"
         @new-chat="handleNewChat"
-        @toggle-sidebar="toggleSidebar"
       >
         <SidebarConversationList
           :conversations="conversations"
@@ -17,15 +16,26 @@
       </LayoutSidebar>
     </aside>
     <main class="main-content">
-      <!-- Floating toggle button when sidebar is collapsed -->
+      <!-- Floating toggle button - always visible outside sidebar -->
       <button
-        v-if="sidebarCollapsed"
         class="sidebar-toggle-floating"
         @click="toggleSidebar"
-        title="Expand sidebar"
+        :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12h18M3 6h18M3 18h18"/>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="toggle-icon"
+          :class="{ rotated: sidebarCollapsed }"
+        >
+          <path d="m15 18-6-6 6-6"/>
         </svg>
       </button>
       <slot />
@@ -113,8 +123,8 @@ onMounted(() => {
 .sidebar-container { display: flex; flex-direction: column; height: 100%; }
 .sidebar-header { display: flex; align-items: center; gap: 8px; height: 56px; padding: 12px; }
 .sidebar-footer { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
-.toggle-btn { background: transparent !important; border: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
 .new-chat-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; background: #3d3d3d; color: #fff; border: none; border-radius: 8px; padding: 10px 14px; }
+.sidebar-toggle-floating { position: absolute; top: 12px; left: 12px; z-index: 100; width: 36px; height: 36px; border-radius: 8px; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; }
 .footer-link { display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
 .conversation-list { display: flex; flex-direction: column; gap: 2px; }
 </style>
@@ -185,5 +195,13 @@ onMounted(() => {
 
 .sidebar-toggle-floating:active {
   transform: scale(0.98);
+}
+
+.sidebar-toggle-floating .toggle-icon {
+  transition: transform 0.2s ease;
+}
+
+.sidebar-toggle-floating .toggle-icon.rotated {
+  transform: rotate(180deg);
 }
 </style>
