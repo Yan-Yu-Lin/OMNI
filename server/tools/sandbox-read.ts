@@ -7,6 +7,9 @@ import { DockerSandbox } from '../utils/docker';
  * Uses factory pattern to receive conversationId from chat endpoint
  */
 const sandboxReadSchema = z.object({
+  description: z
+    .string()
+    .describe('A brief, human-readable description of why you are reading this file (e.g., "Checking build output", "Reviewing generated code")'),
   path: z
     .string()
     .describe('Path to the file to read. Can be absolute (/workspace/file.txt) or relative to /workspace'),

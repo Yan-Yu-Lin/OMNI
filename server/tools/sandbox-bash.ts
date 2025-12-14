@@ -7,6 +7,9 @@ import { DockerSandbox } from '../utils/docker';
  * Uses factory pattern to receive conversationId from chat endpoint
  */
 const sandboxBashSchema = z.object({
+  description: z
+    .string()
+    .describe('A brief, human-readable description of what this command does (e.g., "Installing Python dependencies", "Running tests")'),
   command: z.string().describe('The bash command to execute in the container'),
   timeout: z
     .number()
