@@ -96,6 +96,29 @@ onMounted(() => {
 });
 </script>
 
+<!-- Non-scoped critical styles for SSR - prevents FOUC -->
+<style>
+/* Critical sidebar styles - hardcoded values for immediate SSR render */
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: linear-gradient(180deg, #faf8f5 0%, #f5f1ed 100%);
+  box-shadow: 1px 0 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+}
+.sidebar.collapsed { width: 0; min-width: 0; }
+.sidebar-container { display: flex; flex-direction: column; height: 100%; }
+.sidebar-header { display: flex; align-items: center; gap: 8px; height: 56px; padding: 12px; }
+.sidebar-footer { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
+.toggle-btn { background: transparent !important; border: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.new-chat-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; background: #3d3d3d; color: #fff; border: none; border-radius: 8px; padding: 10px 14px; }
+.footer-link { display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
+.conversation-list { display: flex; flex-direction: column; gap: 2px; }
+</style>
+
 <style scoped>
 .app-layout {
   display: flex;

@@ -85,6 +85,8 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 56px; /* Fixed height prevents jitter during collapse */
+  flex-shrink: 0;
 }
 
 .toggle-btn {
@@ -132,6 +134,8 @@ defineEmits<{
   align-items: center;
   justify-content: center;
   gap: 8px;
+  white-space: nowrap; /* Prevent text wrapping during collapse */
+  overflow: hidden;
   transition:
     background 0.15s ease,
     transform 0.15s ease,
@@ -184,6 +188,7 @@ defineEmits<{
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
+  line-height: 1; /* Explicit line-height for consistent alignment */
   padding: 8px 10px;
   border-radius: var(--radius-md);
   display: flex;
@@ -201,7 +206,13 @@ defineEmits<{
 
 .footer-link svg {
   flex-shrink: 0;
+  width: 16px;
+  height: 16px;
   opacity: 0.7;
+}
+
+.footer-link span {
+  line-height: 16px; /* Match icon height for perfect alignment */
 }
 
 .footer-link:hover svg {
