@@ -80,7 +80,7 @@ export function useWorkspace() {
       fileContent.value = response;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load file content';
-      console.error('Failed to fetch file content:', e);
+      console.error('[Workspace] Failed to fetch file content:', e);
       fileContent.value = null;
     } finally {
       loadingContent.value = false;
@@ -109,6 +109,7 @@ export function useWorkspace() {
     }
 
     selectedFile.value = file;
+    fileContent.value = null; // Clear previous content before fetching
     currentView.value = 'detail';
     previewMode.value = 'rendered'; // Reset to rendered view
 

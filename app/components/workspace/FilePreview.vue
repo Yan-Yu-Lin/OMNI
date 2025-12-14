@@ -251,8 +251,9 @@ const lineCount = computed(() => {
   return props.fileContent.content.split('\n').length;
 });
 
-// Format file size
-const formatSize = (bytes: number): string => {
+// Format file size (with defensive null check)
+const formatSize = (bytes: number | undefined): string => {
+  if (bytes === undefined || bytes === null) return 'Unknown size';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

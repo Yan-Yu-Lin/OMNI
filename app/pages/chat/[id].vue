@@ -167,6 +167,37 @@ const isStreaming = computed(() =>
 let stopMessagesWatch: (() => void) | null = null;
 let stopStatusWatch: (() => void) | null = null;
 
+// Track which tool invocations we've already processed for workspace refresh
+const processedToolIds = ref<Set<string>>(new Set());
+
+// Watch for sandbox tool results in streaming messages
+// This triggers workspace refresh when sandbox_write/sandbox_bash complete
+watch(chatMessages, (messages) => {
+  if (!messages.length) return;
+
+  // Check the last message for tool invocations
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage.role !== 'assistant' || !lastMessage.parts) return;
+
+  // Look for sandbox tool invocations with results
+  for (const part of lastMessage.parts) {
+    if (part.type !== 'tool-invocation') continue;
+
+    const toolPart = part as { type: 'tool-invocation'; toolInvocationId: string; toolName: string; state: string };
+
+    // Only process completed sandbox tools we haven't seen
+    const isSandboxTool = ['sandbox_write', 'sandbox_bash', 'sandbox_read'].includes(toolPart.toolName);
+    const isCompleted = toolPart.state === 'result';
+    const alreadyProcessed = processedToolIds.value.has(toolPart.toolInvocationId);
+
+    if (isSandboxTool && isCompleted && !alreadyProcessed) {
+      processedToolIds.value.add(toolPart.toolInvocationId);
+      // Refresh workspace files
+      fetchWorkspaceFiles(conversationId.value, true);
+    }
+  }
+}, { deep: true });
+
 // Create or update the Chat instance
 const initializeChat = (initialMessages: UIMessage[]) => {
   // Clean up previous watchers
@@ -651,6 +682,9 @@ watch(conversationId, (newId) => {
   // Reset and fetch workspace for new conversation
   resetWorkspace();
   fetchWorkspaceFiles(newId);
+
+  // Clear processed tool IDs for new conversation
+  processedToolIds.value.clear();
 });
 </script>
 

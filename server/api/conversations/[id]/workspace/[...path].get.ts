@@ -149,14 +149,14 @@ export default defineEventHandler(async (event) => {
   const mimeType = getMimeType(fullPath);
   const fileName = basename(fullPath);
 
-  // Set response headers
-  setHeader(event, 'Content-Type', mimeType);
-
   if (download) {
-    // Force download
+    // Force download - set Content-Type to file's MIME type
+    setHeader(event, 'Content-Type', mimeType);
     setHeader(event, 'Content-Disposition', `attachment; filename="${fileName}"`);
     return sendStream(event, createReadStream(fullPath));
   }
+
+  // For non-download requests, return JSON (Nitro auto-sets Content-Type: application/json)
 
   // For text files, return content as JSON for preview
   if (isTextFile(mimeType)) {
@@ -206,6 +206,7 @@ export default defineEventHandler(async (event) => {
           name: fileName,
           mimeType,
           size: stats.size,
+          truncated: false,
           preview: false,
           message: 'Image too large for preview. Download to view.',
         };
@@ -237,6 +238,7 @@ export default defineEventHandler(async (event) => {
     name: fileName,
     mimeType,
     size: stats.size,
+    truncated: false,
     preview: false,
     message: 'Binary file. Download to view.',
   };
