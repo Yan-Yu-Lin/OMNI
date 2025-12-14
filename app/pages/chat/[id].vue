@@ -51,6 +51,11 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import type { ConversationStatus, ProviderPreferences, BranchMessage } from '~/types';
 import { useMessageTree } from '~/composables/useMessageTree';
 
+// Keep page alive to prevent remounting when switching conversations
+definePageMeta({
+  keepalive: true,
+});
+
 const route = useRoute();
 const router = useRouter();
 
