@@ -43,6 +43,16 @@ const CONTAINER_PIDS_LIMIT = 100;
 // In-memory container tracking
 const containerMap = new Map<string, Docker.Container>();
 
+// Activity tracking for idle timeout
+const lastActivityMap = new Map<string, number>();
+
+/**
+ * Update the last activity timestamp for a container
+ */
+function updateActivity(conversationId: string): void {
+  lastActivityMap.set(conversationId, Date.now());
+}
+
 // Docker client singleton
 let dockerClient: Docker | null = null;
 
@@ -97,16 +107,25 @@ export const DockerSandbox = {
     const existingContainer = containerMap.get(conversationId);
     if (existingContainer) {
       try {
-        // Verify it's still running
+        // Verify container state
         const info = await existingContainer.inspect();
         if (info.State.Running) {
           return existingContainer;
         }
-        // Container exists but not running, remove from map
+        // Container exists but stopped - RESTART it (preserves installed packages)
+        if (info.State.Status === 'exited') {
+          console.log(`[DockerSandbox] Restarting stopped container for ${conversationId}`);
+          await existingContainer.start();
+          updateActivity(conversationId);
+          return existingContainer;
+        }
+        // Container in bad state, remove from map
         containerMap.delete(conversationId);
+        lastActivityMap.delete(conversationId);
       } catch {
         // Container no longer exists, remove from map
         containerMap.delete(conversationId);
+        lastActivityMap.delete(conversationId);
       }
     }
 
@@ -136,6 +155,7 @@ export const DockerSandbox = {
 
     await container.start();
     containerMap.set(conversationId, container);
+    updateActivity(conversationId);
 
     console.log(`[DockerSandbox] Container started: ${container.id}`);
 
@@ -156,6 +176,9 @@ export const DockerSandbox = {
     const startTime = Date.now();
     const timeout = Math.min(options?.timeout || DEFAULT_TIMEOUT, MAX_TIMEOUT);
     const workdir = options?.workdir || WORKSPACE_PATH;
+
+    // Update activity timestamp
+    updateActivity(conversationId);
 
     try {
       const container = await this.getOrCreate(conversationId);
@@ -248,6 +271,9 @@ export const DockerSandbox = {
    * Read a file from the container
    */
   async readFile(conversationId: string, path: string): Promise<FileReadResult> {
+    // Update activity timestamp
+    updateActivity(conversationId);
+
     // Normalize path to be within workspace
     const normalizedPath = path.startsWith('/') ? path : `${WORKSPACE_PATH}/${path}`;
 
@@ -274,6 +300,9 @@ export const DockerSandbox = {
    * Write a file to the container
    */
   async writeFile(conversationId: string, path: string, content: string): Promise<FileWriteResult> {
+    // Update activity timestamp
+    updateActivity(conversationId);
+
     // Normalize path to be within workspace
     const normalizedPath = path.startsWith('/') ? path : `${WORKSPACE_PATH}/${path}`;
 
@@ -316,6 +345,7 @@ stat -c %s "${normalizedPath}"`;
       return info.State.Running;
     } catch {
       containerMap.delete(conversationId);
+      lastActivityMap.delete(conversationId);
       return false;
     }
   },
@@ -327,11 +357,12 @@ stat -c %s "${normalizedPath}"`;
   async stop(conversationId: string): Promise<void> {
     const container = containerMap.get(conversationId);
     if (!container) {
+      lastActivityMap.delete(conversationId);
       return;
     }
 
     try {
-      console.log(`[DockerSandbox] Stopping container for conversation ${conversationId}`);
+      console.log(`[DockerSandbox] Stopping and removing container for conversation ${conversationId}`);
       await container.stop({ t: 5 });
       await container.remove();
     } catch (error) {
@@ -339,7 +370,102 @@ stat -c %s "${normalizedPath}"`;
       console.log(`[DockerSandbox] Error stopping container: ${error}`);
     } finally {
       containerMap.delete(conversationId);
+      lastActivityMap.delete(conversationId);
     }
+  },
+
+  /**
+   * Stop a container without removing it (preserves installed packages)
+   * Container can be restarted later via getOrCreate()
+   */
+  async stopContainer(conversationId: string): Promise<void> {
+    const container = containerMap.get(conversationId);
+    if (!container) {
+      return;
+    }
+
+    try {
+      const info = await container.inspect();
+      if (info.State.Running) {
+        console.log(`[DockerSandbox] Stopping idle container for ${conversationId}`);
+        await container.stop({ t: 5 });
+      }
+    } catch (error) {
+      console.log(`[DockerSandbox] Error stopping container: ${error}`);
+    }
+    // NOTE: Do NOT remove from containerMap - we want to restart it later
+  },
+
+  /**
+   * Get all tracked conversation IDs
+   */
+  getTrackedConversations(): string[] {
+    return Array.from(containerMap.keys());
+  },
+
+  /**
+   * Get the last activity timestamp for a container
+   */
+  getLastActivity(conversationId: string): number | undefined {
+    return lastActivityMap.get(conversationId);
+  },
+
+  /**
+   * Stop idle containers based on timeout (without removing them)
+   * Returns array of conversation IDs that were stopped
+   */
+  async stopIdleContainers(idleTimeout: number = 10 * 60 * 1000): Promise<string[]> {
+    const now = Date.now();
+    const stoppedIds: string[] = [];
+
+    for (const conversationId of containerMap.keys()) {
+      const lastActivity = lastActivityMap.get(conversationId);
+
+      // If no activity recorded, treat as very old
+      const idleTime = lastActivity ? now - lastActivity : Infinity;
+
+      if (idleTime > idleTimeout) {
+        console.log(
+          `[DockerSandbox] Container for ${conversationId} idle for ${Math.round(idleTime / 1000)}s, stopping...`
+        );
+
+        try {
+          await this.stopContainer(conversationId);
+          stoppedIds.push(conversationId);
+        } catch (error) {
+          console.error(`[DockerSandbox] Failed to stop idle container ${conversationId}:`, error);
+        }
+      }
+    }
+
+    if (stoppedIds.length > 0) {
+      console.log(`[DockerSandbox] Stopped ${stoppedIds.length} idle container(s)`);
+    }
+
+    return stoppedIds;
+  },
+
+  /**
+   * Stop and remove all containers (for graceful shutdown)
+   */
+  async stopAll(): Promise<void> {
+    const count = containerMap.size;
+    if (count === 0) {
+      return;
+    }
+
+    console.log(`[DockerSandbox] Stopping all ${count} container(s)...`);
+
+    const stopPromises = Array.from(containerMap.keys()).map(async (conversationId) => {
+      try {
+        await this.stop(conversationId);
+      } catch (error) {
+        console.error(`[DockerSandbox] Error stopping container ${conversationId}:`, error);
+      }
+    });
+
+    await Promise.all(stopPromises);
+    console.log('[DockerSandbox] All containers stopped');
   },
 
   /**

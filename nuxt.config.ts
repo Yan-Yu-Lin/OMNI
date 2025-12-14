@@ -30,6 +30,8 @@ export default defineNuxtConfig({
     dockerSandboxTimeout: 30000, // Default command timeout (30s)
     dockerSandboxMaxOutput: 102400, // Max output size (100KB)
     dockerSandboxWorkspacePath: './data/sandboxes', // Where volumes are stored
+    dockerSandboxIdleTimeout: 600000, // Idle timeout before stopping container (10 minutes)
+    dockerSandboxCleanupInterval: 60000, // How often to check for idle containers (1 minute)
 
     // Public (exposed to client)
     public: {
