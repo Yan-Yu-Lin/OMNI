@@ -205,16 +205,6 @@ const renderedMarkdown = computed(() => {
   }
 });
 
-// Rendered HTML content (sanitized)
-const renderedHtml = computed(() => {
-  if (!props.fileContent.content || !isHtml.value) return '';
-
-  return DOMPurify.sanitize(props.fileContent.content, {
-    ADD_ATTR: ['target', 'rel'],
-    ALLOW_DATA_ATTR: false,
-  });
-});
-
 // Syntax-highlighted code content
 const highlightedCode = computed(() => {
   if (!props.fileContent.content) return '';
@@ -274,11 +264,13 @@ const formatSize = (bytes: number | undefined): string => {
       v-html="renderedMarkdown"
     />
 
-    <!-- Rendered HTML -->
-    <div
+    <!-- Rendered HTML (sandboxed iframe for full CSS/JS support) -->
+    <iframe
       v-else-if="isHtml && previewMode === 'rendered' && hasContent"
-      class="rendered-content html-content"
-      v-html="renderedHtml"
+      class="html-iframe-preview"
+      :srcdoc="fileContent.content"
+      sandbox="allow-scripts allow-same-origin"
+      referrerpolicy="no-referrer"
     />
 
     <!-- Code view (raw source) -->
@@ -337,6 +329,14 @@ const formatSize = (bytes: number | undefined): string => {
   padding: 24px;
   line-height: 1.7;
   word-break: break-word;
+}
+
+/* HTML iframe preview */
+.html-iframe-preview {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: white;
 }
 
 /* Markdown styles */
