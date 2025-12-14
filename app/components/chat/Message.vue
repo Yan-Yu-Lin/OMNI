@@ -16,35 +16,22 @@
             <span v-if="isStreaming && isLastTextPart(index)" class="cursor"></span>
           </div>
 
-          <!-- Web Search tool (compact) -->
-          <ToolsWebSearchCard
+          <!-- Web Search tool -->
+          <ToolsSearchToolRow
             v-else-if="part.type === 'tool-web_search'"
             :state="part.state"
             :input="part.input"
             :output="part.output"
           />
 
-          <!-- Scrape URL tool -->
-          <ToolsToolCard
+          <!-- Scrape URL tool (Fetch) -->
+          <ToolsFetchToolRow
             v-else-if="part.type === 'tool-scrape_url'"
-            tool-name="scrape_url"
             :state="part.state"
             :input="part.input"
             :output="part.output"
             :error-text="part.errorText"
-          >
-            <template #input="{ input: toolInput }">
-              <div class="tool-input-summary">
-                <strong>URL:</strong>
-                <a :href="toolInput.url" target="_blank" rel="noopener" class="tool-url">
-                  {{ toolInput.url }}
-                </a>
-              </div>
-            </template>
-            <template #output="{ output: toolOutput }">
-              <ToolsScrapeResult :result="toolOutput" />
-            </template>
-          </ToolsToolCard>
+          />
 
           <!-- Crawl Site tool -->
           <ToolsToolCard
@@ -102,73 +89,31 @@
           </ToolsToolCard>
 
           <!-- Sandbox Bash tool -->
-          <ToolsToolCard
+          <ToolsBashToolRow
             v-else-if="part.type === 'tool-sandbox_bash'"
-            tool-name="sandbox_bash"
             :state="part.state"
             :input="part.input"
             :output="part.output"
             :error-text="part.errorText"
-          >
-            <template #input="{ input: toolInput }">
-              <div class="tool-input-summary">
-                <div class="bash-command">
-                  <code>{{ toolInput.command }}</code>
-                </div>
-                <div v-if="toolInput.workdir !== '/workspace'" class="tool-input-detail">
-                  in {{ toolInput.workdir }}
-                </div>
-              </div>
-            </template>
-            <template #output="{ output: toolOutput }">
-              <ToolsSandboxBashResult :output="toolOutput" />
-            </template>
-          </ToolsToolCard>
+          />
 
           <!-- Sandbox Read tool -->
-          <ToolsToolCard
+          <ToolsReadToolRow
             v-else-if="part.type === 'tool-sandbox_read'"
-            tool-name="sandbox_read"
             :state="part.state"
             :input="part.input"
             :output="part.output"
             :error-text="part.errorText"
-          >
-            <template #input="{ input: toolInput }">
-              <div class="tool-input-summary">
-                <strong>Read:</strong>
-                <code class="file-path">{{ toolInput.path }}</code>
-              </div>
-            </template>
-            <template #output="{ output: toolOutput }">
-              <ToolsSandboxFileResult :output="toolOutput" />
-            </template>
-          </ToolsToolCard>
+          />
 
           <!-- Sandbox Write tool -->
-          <ToolsToolCard
+          <ToolsWriteToolRow
             v-else-if="part.type === 'tool-sandbox_write'"
-            tool-name="sandbox_write"
             :state="part.state"
             :input="part.input"
             :output="part.output"
             :error-text="part.errorText"
-          >
-            <template #input="{ input: toolInput }">
-              <div class="tool-input-summary">
-                <div>
-                  <strong>Write:</strong>
-                  <code class="file-path">{{ toolInput.path }}</code>
-                </div>
-                <div class="tool-input-detail">
-                  {{ formatBytes(toolInput.content?.length || 0) }}
-                </div>
-              </div>
-            </template>
-            <template #output="{ output: toolOutput }">
-              <ToolsSandboxFileResult :output="toolOutput" />
-            </template>
-          </ToolsToolCard>
+          />
 
           <!-- Generic tool fallback -->
           <ToolsToolCard
@@ -278,16 +223,6 @@ const isLastTextPart = (index: number): boolean => {
 const getToolName = (type: string): string => {
   return type.replace('tool-', '');
 };
-
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) {
-    return `${bytes} bytes`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-};
 </script>
 
 <style scoped>
@@ -311,6 +246,7 @@ const formatBytes = (bytes: number): string => {
 }
 
 .message.assistant .message-wrapper {
+  width: 100%;
   max-width: 100%;
 }
 
@@ -440,28 +376,5 @@ const formatBytes = (bytes: number): string => {
 .step-divider hr {
   border: none;
   border-top: 1px dashed #d4d4d4;
-}
-
-.bash-command {
-  background: #18181b;
-  padding: 8px 12px;
-  border-radius: 6px;
-  margin: 4px 0;
-}
-
-.bash-command code {
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 12px;
-  color: #fafafa;
-  word-break: break-all;
-}
-
-.file-path {
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 12px;
-  color: #374151;
-  background: #f3f4f6;
-  padding: 2px 6px;
-  border-radius: 4px;
 }
 </style>
