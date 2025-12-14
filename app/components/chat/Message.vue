@@ -34,59 +34,22 @@
           />
 
           <!-- Crawl Site tool -->
-          <ToolsToolCard
+          <ToolsCrawlToolRow
             v-else-if="part.type === 'tool-crawl_site'"
-            tool-name="crawl_site"
             :state="part.state"
             :input="part.input"
             :output="part.output"
             :error-text="part.errorText"
-          >
-            <template #input="{ input: toolInput }">
-              <div class="tool-input-summary">
-                <div>
-                  <strong>URL:</strong>
-                  <a :href="toolInput.url" target="_blank" rel="noopener" class="tool-url">
-                    {{ toolInput.url }}
-                  </a>
-                </div>
-                <div class="tool-input-detail">
-                  Limit: {{ toolInput.limit || 10 }} pages, Max depth: {{ toolInput.maxDepth || 2 }}
-                </div>
-              </div>
-            </template>
-            <template #output="{ output: toolOutput }">
-              <ToolsCrawlResults :result="toolOutput" />
-            </template>
-          </ToolsToolCard>
+          />
 
           <!-- Map Site tool -->
-          <ToolsToolCard
+          <ToolsMapToolRow
             v-else-if="part.type === 'tool-map_site'"
-            tool-name="map_site"
             :state="part.state"
             :input="part.input"
             :output="part.output"
             :error-text="part.errorText"
-          >
-            <template #input="{ input: toolInput }">
-              <div class="tool-input-summary">
-                <div>
-                  <strong>URL:</strong>
-                  <a :href="toolInput.url" target="_blank" rel="noopener" class="tool-url">
-                    {{ toolInput.url }}
-                  </a>
-                </div>
-                <div class="tool-input-detail">
-                  <span>Limit: {{ toolInput.limit || 100 }} URLs</span>
-                  <span v-if="toolInput.search">, Filter: "{{ toolInput.search }}"</span>
-                </div>
-              </div>
-            </template>
-            <template #output="{ output: toolOutput }">
-              <ToolsMapResults :result="toolOutput" />
-            </template>
-          </ToolsToolCard>
+          />
 
           <!-- Sandbox Bash tool -->
           <ToolsBashToolRow
@@ -342,31 +305,6 @@ const getToolName = (type: string): string => {
   50% {
     opacity: 0;
   }
-}
-
-.tool-input-summary {
-  font-size: 13px;
-  color: #374151;
-}
-
-.tool-input-summary strong {
-  color: #171717;
-}
-
-.tool-input-detail {
-  color: #737373;
-  font-size: 12px;
-  margin-left: 4px;
-}
-
-.tool-url {
-  color: #1a0dab;
-  text-decoration: none;
-  word-break: break-all;
-}
-
-.tool-url:hover {
-  text-decoration: underline;
 }
 
 .step-divider {
