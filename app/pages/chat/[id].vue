@@ -1,11 +1,6 @@
 <template>
   <div class="chat-page">
-    <div v-if="loadingChat" class="loading-chat">
-      Loading conversation...
-    </div>
-
     <ChatContainer
-      v-else
       :messages="chatMessages"
       :is-streaming="isStreaming"
       :models="models"
@@ -601,6 +596,10 @@ watch(conversationId, () => {
   if (chat.value) {
     chat.value.stop();
   }
+
+  // Clear messages immediately (model will update when fetch completes)
+  chatMessages.value = [];
+
   // Reset initial load flag for the new conversation
   isInitialLoad.value = true;
   loadConversation();
@@ -612,14 +611,6 @@ watch(conversationId, () => {
   height: 100%;
   display: flex;
   flex-direction: column;
-}
-
-.loading-chat {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #666;
 }
 
 /* Edit Modal Styles */
