@@ -31,3 +31,18 @@ data/sandboxes/
 
 # Craft documents (personal)
 craft/
+
+# Personal planning/task files
+PLAN.md
+TASK-*.md
+plan*.md
+tasks/
+
+# Debug logs
+DEBUG-LOG-*.md
+
+# Temporary scripts
+analyze_project.py
+
+# Claude Code task history
+.claude/tasks/
