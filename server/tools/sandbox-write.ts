@@ -7,6 +7,9 @@ import { DockerSandbox } from '../utils/docker';
  * Uses factory pattern to receive conversationId from chat endpoint
  */
 const sandboxWriteSchema = z.object({
+  description: z
+    .string()
+    .describe('A brief, human-readable description of what file you are creating (e.g., "Creating Python script for data analysis", "Writing configuration file")'),
   path: z
     .string()
     .describe('Path where the file should be written. Can be absolute (/workspace/file.txt) or relative to /workspace'),

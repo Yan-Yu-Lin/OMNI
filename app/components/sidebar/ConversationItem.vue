@@ -50,25 +50,40 @@ defineEmits<{
 <style scoped>
 .conversation-item {
   position: relative;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.1s;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .conversation-item:hover {
-  background: #e8e8e8;
+  background: var(--sidebar-hover);
 }
 
 .conversation-item.active {
-  background: #e0e0e0;
-  border-left: 3px solid #171717;
-  padding-left: 9px; /* 12px - 3px border */
+  background: var(--sidebar-active-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* Subtle left accent for active item */
+.conversation-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  background: var(--sidebar-active-accent);
+  border-radius: 0 2px 2px 0;
 }
 
 .conversation-title {
   font-size: 14px;
   font-weight: 500;
+  color: var(--sidebar-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -78,54 +93,47 @@ defineEmits<{
 .action-buttons {
   position: absolute;
   top: 50%;
-  right: 4px;
-  transform: translateY(-50%);
+  right: 6px;
+  transform: translateY(-50%) translateX(10px);
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.1s;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
 }
 
 .conversation-item:hover .action-buttons {
   opacity: 1;
-}
-
-/* Always show pin button if item is pinned */
-.conversation-item.pinned .pin-btn {
-  opacity: 1;
-}
-
-.conversation-item.pinned:not(:hover) .action-buttons {
-  opacity: 1;
-}
-
-.conversation-item.pinned:not(:hover) .delete-btn {
-  display: none;
+  transform: translateY(-50%) translateX(0);
 }
 
 .action-btn {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border: none;
   background: transparent;
-  color: #999;
+  color: var(--sidebar-text-muted);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .action-btn:hover {
-  background: #ddd;
-  color: #666;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--sidebar-text);
 }
 
 .pin-btn.is-pinned {
-  color: #666;
+  color: var(--color-error);
 }
 
 .pin-btn.is-pinned:hover {
-  color: #333;
+  color: var(--color-error);
 }
 </style>

@@ -507,3 +507,83 @@ export interface ProvidersApiResponse {
   /** Number of providers available */
   count: number;
 }
+
+// =============================================================================
+// WORKSPACE TYPES
+// =============================================================================
+
+/**
+ * A file or directory in the AI sandbox workspace
+ */
+export interface WorkspaceFile {
+  /** File or directory name */
+  name: string;
+
+  /** Relative path from workspace root */
+  path: string;
+
+  /** Size in bytes (0 for directories) */
+  size: number;
+
+  /** Whether this is a file or directory */
+  type: 'file' | 'directory';
+
+  /** ISO timestamp of last modification */
+  modifiedAt: string;
+
+  /** Child files/directories (only for directories) */
+  children?: WorkspaceFile[];
+}
+
+/**
+ * Response from workspace list API
+ */
+export interface WorkspaceListResponse {
+  /** Conversation ID */
+  conversationId: string;
+
+  /** File tree */
+  files: WorkspaceFile[];
+}
+
+/**
+ * Response from workspace file read API (text files)
+ */
+export interface WorkspaceFileContent {
+  /** Relative path */
+  path: string;
+
+  /** File name */
+  name: string;
+
+  /** MIME type */
+  mimeType: string;
+
+  /** Size in bytes */
+  size: number;
+
+  /** Whether content was truncated due to size */
+  truncated: boolean;
+
+  /** File content (for text files) */
+  content?: string;
+
+  /** Base64 data URL (for images) */
+  dataUrl?: string;
+
+  /** Whether preview is available */
+  preview?: boolean;
+
+  /** Message when preview not available */
+  message?: string;
+}
+
+/**
+ * Workspace panel view state
+ */
+export type WorkspaceView = 'list' | 'detail';
+
+/**
+ * File preview mode
+ */
+export type PreviewMode = 'rendered' | 'code';

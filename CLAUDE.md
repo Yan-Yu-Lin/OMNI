@@ -10,10 +10,12 @@ AI chat application built with Nuxt 4 featuring real-time streaming, web researc
 
 ## Commands
 
+**This project uses pnpm (not npm or yarn).**
+
 ```bash
-npm run dev       # Development server at http://localhost:3000
-npm run build     # Production build
-npm run preview   # Preview production build
+pnpm dev          # Development server at http://localhost:3000
+pnpm build        # Production build
+pnpm preview      # Preview production build
 ```
 
 ## Environment Variables

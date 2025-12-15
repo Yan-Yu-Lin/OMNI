@@ -1,11 +1,24 @@
 <template>
-  <div class="chat-page">
-    <div v-if="loadingChat" class="loading-chat">
-      Loading conversation...
-    </div>
+  <div class="chat-page" :class="{ 'workspace-open': panelOpen }">
+    <!-- Workspace trigger button (top-right) -->
+    <button
+      v-if="hasWorkspaceFiles"
+      class="workspace-trigger"
+      title="AI Workspace"
+      @click="togglePanel"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <line x1="10" y1="9" x2="8" y2="9" />
+      </svg>
+    </button>
 
-    <ChatContainer
-      v-else
+    <!-- Main chat area -->
+    <div class="chat-main">
+      <ChatContainer
       :messages="chatMessages"
       :is-streaming="isStreaming"
       :models="models"
@@ -19,6 +32,13 @@
       @edit="handleEdit"
       @regenerate="handleRegenerate"
       @switch-branch="handleSwitchBranch"
+    />
+    </div>
+
+    <!-- Workspace Panel -->
+    <WorkspacePanel
+      v-if="panelOpen"
+      :conversation-id="conversationId"
     />
 
     <!-- Edit Message Modal -->
@@ -55,6 +75,20 @@ import { Chat } from '@ai-sdk/vue';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import type { ConversationStatus, ProviderPreferences, BranchMessage } from '~/types';
 import { useMessageTree } from '~/composables/useMessageTree';
+
+// Workspace composable for AI sandbox file browser
+const {
+  panelOpen,
+  hasFiles: hasWorkspaceFiles,
+  fetchFiles: fetchWorkspaceFiles,
+  togglePanel,
+  switchConversation,
+} = useWorkspace();
+
+// Keep page alive to prevent remounting when switching conversations
+definePageMeta({
+  keepalive: true,
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -133,6 +167,37 @@ const isStreaming = computed(() =>
 let stopMessagesWatch: (() => void) | null = null;
 let stopStatusWatch: (() => void) | null = null;
 
+// Track which tool invocations we've already processed for workspace refresh
+const processedToolIds = ref<Set<string>>(new Set());
+
+// Watch for sandbox tool results in streaming messages
+// This triggers workspace refresh when sandbox_write/sandbox_bash complete
+watch(chatMessages, (messages) => {
+  if (!messages.length) return;
+
+  // Check the last message for tool invocations
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage.role !== 'assistant' || !lastMessage.parts) return;
+
+  // Look for sandbox tool invocations with results
+  for (const part of lastMessage.parts) {
+    if (part.type !== 'tool-invocation') continue;
+
+    const toolPart = part as { type: 'tool-invocation'; toolInvocationId: string; toolName: string; state: string };
+
+    // Only process completed sandbox tools we haven't seen
+    const isSandboxTool = ['sandbox_write', 'sandbox_bash', 'sandbox_read'].includes(toolPart.toolName);
+    const isCompleted = toolPart.state === 'result';
+    const alreadyProcessed = processedToolIds.value.has(toolPart.toolInvocationId);
+
+    if (isSandboxTool && isCompleted && !alreadyProcessed) {
+      processedToolIds.value.add(toolPart.toolInvocationId);
+      // Refresh workspace files
+      fetchWorkspaceFiles(conversationId.value, true);
+    }
+  }
+}, { deep: true });
+
 // Create or update the Chat instance
 const initializeChat = (initialMessages: UIMessage[]) => {
   // Clean up previous watchers
@@ -178,6 +243,9 @@ const initializeChat = (initialMessages: UIMessage[]) => {
       // Reload and rebuild tree to sync with server state
       // This ensures branch navigation is up-to-date after new messages
       await reloadAndRebuildTree();
+
+      // Refresh workspace files (sandbox tools may have created new files)
+      fetchWorkspaceFiles(conversationId.value, true);
     },
     onError: (error) => {
       console.error('[Chat] Error:', error);
@@ -585,6 +653,20 @@ onMounted(async () => {
   await fetchSettings(true); // Force refresh to get latest lastUsed
   fetchModels();
   await loadConversation();
+  // Note: workspace files are fetched in onActivated (which also fires on first mount for keep-alive)
+});
+
+// Handle keep-alive deactivation (save workspace state before leaving)
+onDeactivated(() => {
+  // Save workspace state for this conversation before caching
+  const { saveState } = useWorkspace();
+  saveState(conversationId.value);
+});
+
+// Handle keep-alive reactivation (when switching back to this cached conversation)
+onActivated(async () => {
+  // Refresh workspace files when this conversation is reactivated
+  await switchConversation(null, conversationId.value);
 });
 
 // Cleanup on unmount
@@ -597,13 +679,23 @@ onUnmounted(() => {
 });
 
 // Reload when conversation changes (handles navigation between conversations)
-watch(conversationId, () => {
+watch(conversationId, async (newId, oldId) => {
   if (chat.value) {
     chat.value.stop();
   }
+
+  // Clear messages immediately (model will update when fetch completes)
+  chatMessages.value = [];
+
   // Reset initial load flag for the new conversation
   isInitialLoad.value = true;
   loadConversation();
+
+  // Smart workspace switch (preserves panel state, no blinking)
+  await switchConversation(oldId ?? null, newId);
+
+  // Clear processed tool IDs for new conversation
+  processedToolIds.value.clear();
 });
 </script>
 
@@ -611,15 +703,57 @@ watch(conversationId, () => {
 .chat-page {
   height: 100%;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  position: relative;
 }
 
-.loading-chat {
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Workspace trigger button */
+.workspace-trigger {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 100;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
   color: #666;
+  transition: all 0.15s ease;
+}
+
+.workspace-trigger:hover {
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  color: #171717;
+  transform: scale(1.05);
+}
+
+.workspace-trigger:active {
+  transform: scale(0.98);
+}
+
+/* When workspace panel is open */
+.chat-page.workspace-open .workspace-trigger {
+  background: #171717;
+  color: #fff;
+}
+
+.chat-page.workspace-open .workspace-trigger:hover {
+  background: #333;
 }
 
 /* Edit Modal Styles */

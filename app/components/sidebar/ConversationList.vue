@@ -173,22 +173,26 @@ const groupedConversations = computed<GroupedConversations>(() => {
 .section-header {
   font-size: 11px;
   font-weight: 600;
-  color: #888;
+  color: var(--sidebar-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 12px 12px 4px;
-  margin-top: 4px;
+  letter-spacing: 0.6px;
+  padding: 14px 12px 6px;
+  margin-top: 8px;
+  border-bottom: 1px solid var(--sidebar-divider);
+  margin-bottom: 4px;
 }
 
 .section-header:first-child {
   margin-top: 0;
+  padding-top: 8px;
 }
 
 .loading,
 .empty {
-  padding: 16px;
+  padding: 24px 16px;
   text-align: center;
-  color: #666;
-  font-size: 14px;
+  color: var(--sidebar-text-muted);
+  font-size: 13px;
+  font-weight: 500;
 }
 </style>
