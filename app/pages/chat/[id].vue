@@ -82,7 +82,7 @@ const {
   hasFiles: hasWorkspaceFiles,
   fetchFiles: fetchWorkspaceFiles,
   togglePanel,
-  reset: resetWorkspace,
+  switchConversation,
 } = useWorkspace();
 
 // Keep page alive to prevent remounting when switching conversations
@@ -653,8 +653,20 @@ onMounted(async () => {
   await fetchSettings(true); // Force refresh to get latest lastUsed
   fetchModels();
   await loadConversation();
-  // Fetch workspace files for this conversation
-  fetchWorkspaceFiles(conversationId.value);
+  // Note: workspace files are fetched in onActivated (which also fires on first mount for keep-alive)
+});
+
+// Handle keep-alive deactivation (save workspace state before leaving)
+onDeactivated(() => {
+  // Save workspace state for this conversation before caching
+  const { saveState } = useWorkspace();
+  saveState(conversationId.value);
+});
+
+// Handle keep-alive reactivation (when switching back to this cached conversation)
+onActivated(async () => {
+  // Refresh workspace files when this conversation is reactivated
+  await switchConversation(null, conversationId.value);
 });
 
 // Cleanup on unmount
@@ -667,7 +679,7 @@ onUnmounted(() => {
 });
 
 // Reload when conversation changes (handles navigation between conversations)
-watch(conversationId, (newId) => {
+watch(conversationId, async (newId, oldId) => {
   if (chat.value) {
     chat.value.stop();
   }
@@ -679,9 +691,8 @@ watch(conversationId, (newId) => {
   isInitialLoad.value = true;
   loadConversation();
 
-  // Reset and fetch workspace for new conversation
-  resetWorkspace();
-  fetchWorkspaceFiles(newId);
+  // Smart workspace switch (preserves panel state, no blinking)
+  await switchConversation(oldId ?? null, newId);
 
   // Clear processed tool IDs for new conversation
   processedToolIds.value.clear();

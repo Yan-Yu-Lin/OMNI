@@ -14,6 +14,7 @@ const {
   loadingContent,
   hasFiles,
   totalFileCount,
+  currentConversationId,
   fetchFiles,
   closePanel,
   selectFile,
@@ -32,9 +33,15 @@ const minWidth = 300;
 const maxWidth = 800;
 
 // Fetch files when panel opens or conversation changes
+// Note: With keep-alive, multiple WorkspacePanel instances may exist.
+// Only fetch if this panel's conversation matches the current one.
 watch(
   () => [panelOpen.value, props.conversationId],
   async ([open, convId]) => {
+    // Skip if this panel is for a different (cached) conversation
+    if (currentConversationId.value && currentConversationId.value !== convId) {
+      return;
+    }
     if (open && convId) {
       await fetchFiles(convId as string);
     }

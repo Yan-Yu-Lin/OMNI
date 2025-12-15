@@ -6,6 +6,17 @@ import type {
   PreviewMode,
 } from '~/types';
 
+// Per-conversation UI state (session-only, in-memory)
+interface ConversationWorkspaceState {
+  panelOpen: boolean;
+  currentView: WorkspaceView;
+  selectedFilePath: string | null;
+  previewMode: PreviewMode;
+}
+
+// Store workspace UI state per conversation (survives switching, lost on refresh)
+const conversationStates = new Map<string, ConversationWorkspaceState>();
+
 export function useWorkspace() {
   // Panel state
   const panelOpen = useState<boolean>('workspace-panel-open', () => false);
@@ -165,6 +176,66 @@ export function useWorkspace() {
     currentConversationId.value = null;
   };
 
+  // Save current UI state for a conversation
+  const saveStateForConversation = (conversationId: string) => {
+    conversationStates.set(conversationId, {
+      panelOpen: panelOpen.value,
+      currentView: currentView.value,
+      selectedFilePath: selectedFile.value?.path ?? null,
+      previewMode: previewMode.value,
+    });
+  };
+
+  // Restore UI state for a conversation (or use defaults)
+  const restoreStateForConversation = (conversationId: string, hasFilesNow: boolean) => {
+    const saved = conversationStates.get(conversationId);
+
+    if (saved && hasFilesNow) {
+      // Restore saved state if conversation has files
+      panelOpen.value = saved.panelOpen;
+      currentView.value = saved.currentView === 'detail' ? 'list' : saved.currentView; // Always go to list on switch
+      previewMode.value = saved.previewMode;
+    } else if (!hasFilesNow) {
+      // No files = close panel
+      panelOpen.value = false;
+      currentView.value = 'list';
+    }
+    // If has files but no saved state, keep current panelOpen state (don't force close)
+  };
+
+  // Switch to a new conversation (preserves state, no blinking)
+  const switchConversation = async (fromId: string | null, toId: string) => {
+    // 1. Save current state before switching
+    if (fromId && currentConversationId.value === fromId) {
+      saveStateForConversation(fromId);
+    }
+
+    // 2. Clear file-specific state (but not panel open state yet)
+    selectedFile.value = null;
+    fileContent.value = null;
+    error.value = null;
+
+    // 3. Fetch files for new conversation
+    loadingFiles.value = true;
+    try {
+      const response = await $fetch<WorkspaceListResponse>(
+        `/api/conversations/${toId}/workspace`
+      );
+      files.value = response.files;
+      currentConversationId.value = toId;
+    } catch (e) {
+      console.error('Failed to fetch workspace files:', e);
+      files.value = [];
+      currentConversationId.value = toId;
+    } finally {
+      loadingFiles.value = false;
+    }
+
+    // 4. Restore or set appropriate state based on whether new conversation has files
+    const hasFilesNow = files.value.length > 0;
+    restoreStateForConversation(toId, hasFilesNow);
+  };
+
   // Refresh files for current conversation
   const refresh = async () => {
     if (currentConversationId.value) {
@@ -208,5 +279,7 @@ export function useWorkspace() {
     copyContent,
     reset,
     refresh,
+    switchConversation,
+    saveState: saveStateForConversation,
   };
 }
