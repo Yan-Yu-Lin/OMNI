@@ -28,3 +28,6 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 data/sandboxes/
+
+# Craft documents (personal)
+craft/
