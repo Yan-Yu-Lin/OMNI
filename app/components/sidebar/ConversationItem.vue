@@ -94,28 +94,18 @@ defineEmits<{
   position: absolute;
   top: 50%;
   right: 6px;
-  transform: translateY(-50%);
+  transform: translateY(-50%) translateX(10px);
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
 }
 
 .conversation-item:hover .action-buttons {
   opacity: 1;
-}
-
-/* Always show pin button if item is pinned */
-.conversation-item.pinned .pin-btn {
-  opacity: 1;
-}
-
-.conversation-item.pinned:not(:hover) .action-buttons {
-  opacity: 1;
-}
-
-.conversation-item.pinned:not(:hover) .delete-btn {
-  display: none;
+  transform: translateY(-50%) translateX(0);
 }
 
 .action-btn {
@@ -140,10 +130,10 @@ defineEmits<{
 }
 
 .pin-btn.is-pinned {
-  color: var(--sidebar-text);
+  color: var(--color-error);
 }
 
 .pin-btn.is-pinned:hover {
-  color: var(--sidebar-active-accent);
+  color: var(--color-error);
 }
 </style>
