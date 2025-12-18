@@ -3,4 +3,9 @@ ignoredBuiltDependencies:
   - protobufjs
   - ssh2
 
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - better-sqlite3
+  - esbuild
+
 managePackageManagerVersions: false
