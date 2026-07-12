@@ -1,7 +1,21 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+const hmrPort = Number.parseInt(process.env.NUXT_HMR_PORT ?? '', 10) || 24679;
+const hmrConfig = {
+  port: hmrPort,
+  clientPort: hmrPort,
+  timeout: 5000,
+};
+
+const devtoolsEnabled =
+  process.env.NUXT_DEVTOOLS === '1'
+    ? true
+    : process.env.NUXT_DEVTOOLS === '0'
+      ? false
+      : process.platform !== 'darwin';
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
-  devtools: { enabled: true },
+  devtools: { enabled: devtoolsEnabled },
 
   typescript: {
     strict: true,
@@ -50,11 +64,31 @@ export default defineNuxtConfig({
 
   // Vite configuration to improve HMR stability
   vite: {
+    $client: {
+      server: {
+        hmr: hmrConfig,
+      },
+    },
+    $server: {
+      server: {
+        hmr: hmrConfig,
+      },
+    },
     server: {
       // Increase HMR timeout to prevent premature disconnection on tab switch
-      hmr: {
-        timeout: 5000,
-      },
+      hmr: hmrConfig,
+    },
+  },
+
+  hooks: {
+    'vite:extendConfig'(config) {
+      config.server ??= {};
+      const existingHmr =
+        typeof config.server.hmr === 'object' && config.server.hmr ? config.server.hmr : {};
+      config.server.hmr = {
+        ...existingHmr,
+        ...hmrConfig,
+      };
     },
   },
 
