@@ -1,6 +1,9 @@
-ignoredBuiltDependencies:
+managePackageManagerVersions: false
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - better-sqlite3
   - cpu-features
+  - esbuild
   - protobufjs
   - ssh2
-
-managePackageManagerVersions: false

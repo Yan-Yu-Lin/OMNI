@@ -1,1 +1,1 @@
-{"@anthropic-ai/claude-code": {"better-sqlite3": true}}
+{"@anthropic-ai/claude-code": {"better-sqlite3": true}, "Chat-Interface": {"better-sqlite3": true, "esbuild": true, "@parcel/watcher": true}}
